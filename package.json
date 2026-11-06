@@ -1,0 +1,12 @@
+{
+  "name": "daepo-fortress-online",
+  "version": "1.0.0",
+  "description": "Turn-based Artillery Tank Game (1-4P Single AI / Local & 2-4P Online Multi)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

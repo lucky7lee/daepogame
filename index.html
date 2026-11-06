@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#0b1220" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="대포대전" />
+  <link rel="manifest" href="manifest.json" />
+  <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png" />
+  <link rel="Shortcut Icon" href="favicon.ico" />
+  <link rel="apple-touch-icon" href="icon-192.png" />
+  <title>포트리스 대포대전 - 1~4인 턴제 대포 게임</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="app-shell">
+
+    <!-- ==========================================
+         GLOBAL TOP BAR (Shown on Menu / Setup / Lobby / Room)
+         ========================================== -->
+    <header id="global-header" class="top-header">
+      <div class="brand-box">
+        <img src="icon-192.png" onerror="this.onerror=null;this.src='icon.svg';" alt="대포대전" class="brand-icon" />
+        <div class="brand-titles">
+          <span class="brand-main">DAEPO FORTRESS</span>
+          <span class="brand-sub">1~4P ARTILLERY BATTLE</span>
+        </div>
+      </div>
+
+      <div class="header-right">
+        <div class="stat-pill" title="나의 멀티/싱글 통합 전적">
+          <span class="s-win">승 <strong id="hdr-stat-w">0</strong></span>
+          <span class="s-lose">패 <strong id="hdr-stat-l">0</strong></span>
+          <span class="s-rate" id="hdr-stat-r">0%</span>
+        </div>
+        <button id="btn-sound-toggle" class="icon-btn sound-on" type="button" title="사운드 켜기/끄기">🔊</button>
+        <button id="btn-reset-stats" class="icon-btn" type="button" title="전적 초기화">↺</button>
+        <button id="btn-open-install" class="icon-btn hidden" type="button" title="바탕화면 바로가기 설치">📲</button>
+      </div>
+    </header>
+
+    <!-- ==========================================
+         1. HOME MENU SCREEN
+         ========================================== -->
+    <section id="screen-menu" class="screen-view">
+      <div class="menu-scroll">
+        <div class="hero-banner">
+          <div class="hero-icon-wrap">
+            <img src="icon-192.png" onerror="this.onerror=null;this.src='icon.svg';" alt="대포대전" class="hero-logo" />
+          </div>
+          <h1 class="hero-title">포트리스 대포대전</h1>
+          <p class="hero-desc">바람과 지형 굴곡을 계산해 포물선 탄도로 상대를 격파하세요!</p>
+        </div>
+
+        <div class="id-card">
+          <label class="id-pill" id="name-input-pill" for="input-nickname">
+            <span class="id-tag">👤 닉네임</span>
+            <input id="input-nickname" type="text" maxlength="10" placeholder="닉네임 입력 (예: 명사수)" autocomplete="off" />
+          </label>
+          <p id="id-warning-msg" class="id-warn hidden">⚠️ 게임을 시작하기 전에 닉네임을 입력해 주세요!</p>
+        </div>
+
+        <div class="mode-cards">
+          <button id="btn-go-single" class="mode-card single" type="button">
+            <div class="mode-emoji">🤖</div>
+            <div class="mode-info">
+              <div class="mode-title">싱글 게임 (1~4인)</div>
+              <div class="mode-detail">AI 1~3명 추가 대전 · 로컬 교대 · 영점 연습</div>
+            </div>
+            <span class="mode-arrow">설정 ▶</span>
+          </button>
+
+          <button id="btn-go-multi" class="mode-card multi" type="button">
+            <div class="mode-emoji">🌐</div>
+            <div class="mode-info">
+              <div class="mode-title">멀티 게임 (2~4인)</div>
+              <div class="mode-detail">대기실 방 생성 · 참여 인원수(2~4명) 맞춤 대전</div>
+            </div>
+            <span class="mode-arrow">입장 ▶</span>
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==========================================
+         2. SINGLE GAME SETUP SCREEN (1~4P AI / Local)
+         ========================================== -->
+    <section id="screen-single-setup" class="screen-view hidden">
+      <div class="nav-subbar">
+        <button id="btn-single-back" class="pill-btn" type="button">◀ 홈으로</button>
+        <span class="subbar-title">🤖 싱글 게임 설정</span>
+        <span class="subbar-spacer"></span>
+      </div>
+
+      <div class="setup-scroll">
+        <!-- Sub-mode Toggle: vs AI or Pass-and-Play -->
+        <div class="setup-block">
+          <div class="block-label">플레이 방식</div>
+          <div class="tab-row">
+            <button id="tab-single-ai" class="tab-btn active" type="button">🤖 AI 추가 대전 (나 + AI)</button>
+            <button id="tab-single-local" class="tab-btn" type="button">👥 한 기기 교대 (2~4인)</button>
+          </div>
+
+          <!-- AI Count Selector -->
+          <div id="panel-ai-count" class="count-grid">
+            <button class="count-card active" data-ai-count="1" type="button">
+              <span class="c-badge">2인용</span>
+              <strong>AI 1명 추가</strong>
+              <small>나 vs 영점조절 AI 1기</small>
+            </button>
+            <button class="count-card" data-ai-count="2" type="button">
+              <span class="c-badge">3인용</span>
+              <strong>AI 2명 추가</strong>
+              <small>나 + AI 2기 개인전</small>
+            </button>
+            <button class="count-card" data-ai-count="3" type="button">
+              <span class="c-badge">4인용</span>
+              <strong>AI 3명 추가</strong>
+              <small>나 + AI 3기 대난투</small>
+            </button>
+            <button class="count-card" data-ai-count="0" type="button">
+              <span class="c-badge practice">1인용</span>
+              <strong>영점 사격 연습</strong>
+              <small>AI 없이 표적 맞히기</small>
+            </button>
+          </div>
+
+          <!-- Local Pass & Play Count Selector -->
+          <div id="panel-local-count" class="count-grid three-cols hidden">
+            <button class="count-card active" data-local-count="2" type="button">
+              <span class="c-badge">2인용</span>
+              <strong>로컬 2인 대전</strong>
+              <small>1P vs 2P 순서 교대</small>
+            </button>
+            <button class="count-card" data-local-count="3" type="button">
+              <span class="c-badge">3인용</span>
+              <strong>로컬 3인 대전</strong>
+              <small>1P~3P 순서 교대</small>
+            </button>
+            <button class="count-card" data-local-count="4" type="button">
+              <span class="c-badge">4인용</span>
+              <strong>로컬 4인 대전</strong>
+              <small>1P~4P 순서 교대</small>
+            </button>
+          </div>
+        </div>
+
+        <!-- Tank Selection -->
+        <div class="setup-block">
+          <div class="block-label">내 탱크 선택</div>
+          <div id="single-tank-grid" class="tank-select-grid">
+            <button class="tank-card active" data-tank="cannon" type="button">
+              <span class="t-icon">🛡️</span>
+              <span class="t-name">캐논</span>
+              <span class="t-desc">밸런스 표준형</span>
+            </button>
+            <button class="tank-card" data-tank="duke" type="button">
+              <span class="t-icon">💥</span>
+              <span class="t-name">헤비듀크</span>
+              <span class="t-desc">강력한 화력형</span>
+            </button>
+            <button class="tank-card" data-tank="multi" type="button">
+              <span class="t-icon">🌋</span>
+              <span class="t-name">크레이터</span>
+              <span class="t-desc">지형 파괴 특화</span>
+            </button>
+            <button class="tank-card" data-tank="laser" type="button">
+              <span class="t-icon">⚡</span>
+              <span class="t-name">스피드</span>
+              <span class="t-desc">장거리 기동형</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Map Selection -->
+        <div class="setup-block">
+          <div class="block-label">전장 지형 (매 게임 랜덤 굴곡 생성)</div>
+          <div id="single-map-chips" class="chip-row">
+            <button class="map-chip active" data-map="random" type="button">🎲 랜덤 지형</button>
+            <button class="map-chip" data-map="mountains" type="button">🏔️ 험준한 설산</button>
+            <button class="map-chip" data-map="canyon" type="button">🏜️ 붉은 대계곡</button>
+            <button class="map-chip" data-map="hills" type="button">🌿 초원 구릉지</button>
+            <button class="map-chip" data-map="twinpeaks" type="button">🌋 쌍봉 분지</button>
+            <button class="map-chip" data-map="terrace" type="button">🏜️ 단차 고원</button>
+          </div>
+        </div>
+
+        <button id="btn-start-single" class="primary-cta-btn" type="button">🚀 출격! 게임 시작</button>
+      </div>
+    </section>
+
+    <!-- ==========================================
+         3. MULTIPLAYER LOBBY SCREEN
+         ========================================== -->
+    <section id="screen-lobby" class="screen-view hidden">
+      <div class="nav-subbar">
+        <button id="btn-lobby-back" class="pill-btn" type="button">◀ 홈으로</button>
+        <div class="subbar-center">
+          <span class="subbar-title">🌐 멀티 대기실</span>
+          <span id="ws-status-badge" class="ws-badge connecting">연결중...</span>
+        </div>
+        <button id="btn-refresh-rooms" class="pill-btn" type="button" title="방 목록 새로고침">🔄</button>
+      </div>
+
+      <div class="lobby-body">
+        <div class="create-room-bar">
+          <input id="input-room-title" type="text" maxlength="20" class="room-title-input" placeholder="방 제목 입력 (비워두면 자동 생성)" />
+          <button id="btn-create-room" class="create-room-btn" type="button">＋ 방 만들기</button>
+        </div>
+
+        <div class="lobby-guide-banner">
+          💡 방에 <strong>2명 참여 시 2인용</strong>, <strong>3명 참여 시 3인용</strong>, <strong>4명 참여 시 4인용</strong> 게임으로 진행됩니다!
+        </div>
+
+        <div class="room-list-panel">
+          <div class="room-list-header">
+            <span>대기실 방 목록</span>
+            <span id="room-count-badge" class="cnt-pill">0</span>
+          </div>
+          <div id="room-list-container" class="room-list-items">
+            <div class="empty-room-msg">생성된 방이 없습니다 — 상단의 [＋ 방 만들기]를 눌러보세요!</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==========================================
+         4. MULTIPLAYER WAITING ROOM SCREEN (2~4 Players)
+         ========================================== -->
+    <section id="screen-room" class="screen-view hidden">
+      <div class="nav-subbar">
+        <button id="btn-room-leave" class="pill-btn danger" type="button">◀ 방 나가기</button>
+        <div class="subbar-center">
+          <span id="room-view-title" class="subbar-title">대포방</span>
+          <span id="room-mode-pill" class="mode-count-pill">대기중 (1/4)</span>
+        </div>
+        <span class="subbar-spacer"></span>
+      </div>
+
+      <div class="waiting-room-body">
+        <div id="room-player-slots" class="player-slots-grid">
+          <!-- Dynamically populated 4 slots -->
+        </div>
+
+        <div class="room-config-row">
+          <div class="room-cfg-col">
+            <div class="mini-label">내 탱크 기체 변경</div>
+            <div id="room-tank-selector" class="mini-tank-row">
+              <button class="mini-tank-btn active" data-tank="cannon" type="button">🛡️ 캐논</button>
+              <button class="mini-tank-btn" data-tank="duke" type="button">💥 듀크</button>
+              <button class="mini-tank-btn" data-tank="multi" type="button">🌋 크레이터</button>
+              <button class="mini-tank-btn" data-tank="laser" type="button">⚡ 스피드</button>
+            </div>
+          </div>
+
+          <div class="room-cfg-col">
+            <div class="mini-label">맵 지형 <span id="room-map-lock-hint">(방장 선택)</span></div>
+            <div id="room-map-selector" class="mini-tank-row">
+              <button class="mini-map-btn active" data-map="random" type="button">🎲 랜덤</button>
+              <button class="mini-map-btn" data-map="mountains" type="button">🏔️ 설산</button>
+              <button class="mini-map-btn" data-map="canyon" type="button">🏜️ 계곡</button>
+              <button class="mini-map-btn" data-map="hills" type="button">🌿 구릉</button>
+              <button class="mini-map-btn" data-map="twinpeaks" type="button">🌋 쌍봉</button>
+              <button class="mini-map-btn" data-map="terrace" type="button">🏜️ 고원</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Quick Chat & Notice Log -->
+        <div class="room-chat-box">
+          <div id="room-chat-log" class="room-chat-log"></div>
+          <div class="quick-chat-stamps">
+            <button class="stamp-btn" data-msg="👋 안녕하세요!" type="button">👋 안녕!</button>
+            <button class="stamp-btn" data-msg="🚀 바로 시작해요!" type="button">🚀 시작해요!</button>
+            <button class="stamp-btn" data-msg="⏳ 한 분만 더 기다려요" type="button">⏳ 대기!</button>
+            <button class="stamp-btn" data-msg="🔥 재밌게 해봐요!" type="button">🔥 가즈아!</button>
+          </div>
+        </div>
+
+        <div class="room-footer-action">
+          <button id="btn-host-start-match" class="primary-cta-btn" type="button" disabled>
+            ⏳ 최소 2명 이상 모이면 시작 가능 (현재 1/4명)
+          </button>
+          <div id="guest-wait-banner" class="guest-wait-banner hidden">
+            ⏳ 방장이 게임을 시작하기를 기다리는 중입니다...
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==========================================
+         5. BATTLEFIELD GAME SCREEN (PC & Mobile Optimized)
+         ========================================== -->
+    <section id="screen-game" class="screen-view game-screen hidden">
+      <!-- Compact Battle Top Bar -->
+      <div class="battle-topbar">
+        <div class="bt-left">
+          <button id="btn-battle-exit" class="bt-btn exit" type="button">◀ 나가기</button>
+          <div id="turn-indicator" class="turn-pill">
+            <span id="turn-badge-dot">🔵</span>
+            <span id="turn-player-name">내 턴</span>
+            <span id="turn-timer" class="turn-timer">35s</span>
+          </div>
+        </div>
+
+        <!-- Wind Gauge -->
+        <div class="wind-box" title="현재 풍향 및 풍속 (탄도에 영향)">
+          <span class="wind-title">WIND</span>
+          <div class="wind-meter">
+            <div class="wind-bar-half left"><div id="wind-fill-left" class="wind-fill"></div></div>
+            <div class="wind-center-pin"></div>
+            <div class="wind-bar-half right"><div id="wind-fill-right" class="wind-fill"></div></div>
+          </div>
+          <span id="wind-value-text" class="wind-val">무풍 0</span>
+        </div>
+
+        <!-- Minimap & Camera Controls -->
+        <div class="bt-right">
+          <canvas id="minimap-canvas" width="140" height="36" title="미니맵 터치/드래그로 화면 좌우 이동"></canvas>
+          <button id="btn-focus-me" class="bt-btn focus" type="button" title="현재 턴 탱크로 카메라 이동">🎯 포커스</button>
+          <button id="btn-battle-sound" class="bt-btn" type="button" title="사운드">🔊</button>
+        </div>
+      </div>
+
+      <!-- Alive Players Status Strip (Tap any player to pan camera to them & inspect distance!) -->
+      <div id="hud-players-strip" class="players-strip"></div>
+
+      <!-- Fixed-Height Horizontally Scrolling Battlefield Stage -->
+      <div id="battle-stage" class="battle-stage">
+        <canvas id="game-canvas"></canvas>
+
+        <!-- Floating Status Toast (AI Zeroing Info / Turn Banner / Camera Scroll Hint) -->
+        <div id="battle-toast" class="battle-toast hidden"></div>
+
+        <!-- Floating Recenter Pill when manually scrolled away -->
+        <button id="btn-floating-recenter" class="floating-recenter hidden" type="button">
+          🎯 내 탱크로 돌아가기
+        </button>
+      </div>
+
+      <!-- Fortress Tactical Bottom Control Deck -->
+      <div id="control-deck" class="control-deck">
+        <!-- Weapon / Special Shell Strip -->
+        <div class="weapon-strip">
+          <button class="wpn-btn active" data-wpn="normal" type="button">
+            <span class="w-ico">💣</span><span class="w-lbl">일반탄</span><em class="w-cnt" id="ammo-normal">∞</em>
+          </button>
+          <button class="wpn-btn" data-wpn="double" type="button">
+            <span class="w-ico">🚀</span><span class="w-lbl">더블샷</span><em class="w-cnt" id="ammo-double">2</em>
+          </button>
+          <button class="wpn-btn" data-wpn="power" type="button">
+            <span class="w-ico">☢️</span><span class="w-lbl">고폭탄</span><em class="w-cnt" id="ammo-power">1</em>
+          </button>
+          <button class="wpn-btn" data-wpn="teleport" type="button">
+            <span class="w-ico">🌀</span><span class="w-lbl">이동탄</span><em class="w-cnt" id="ammo-teleport">1</em>
+          </button>
+          <button class="wpn-btn" data-wpn="heal" type="button">
+            <span class="w-ico">🔧</span><span class="w-lbl">수리+35</span><em class="w-cnt" id="ammo-heal">1</em>
+          </button>
+          <span class="pc-key-hint">PC: 방향키(이동/각도) · Space(파워차징) · 화면드래그(좌우 정찰)</span>
+        </div>
+
+        <!-- Main Controls Row: Move | Angle | Power & Fire -->
+        <div class="controls-main-row">
+          <!-- 1. Tank Move + Fuel -->
+          <div class="ctrl-group move-group">
+            <div class="move-btns">
+              <button id="btn-move-left" class="pad-btn" type="button">◀</button>
+              <div class="move-center-lbl">
+                <span>이동</span>
+                <strong id="lbl-facing">우 ▶</strong>
+              </div>
+              <button id="btn-move-right" class="pad-btn" type="button">▶</button>
+            </div>
+            <div class="fuel-bar-wrap" title="이번 턴 남은 이동 연료">
+              <span class="fuel-tag">⛽</span>
+              <div class="fuel-track"><div id="fuel-bar-fill" class="fuel-fill"></div></div>
+              <span id="lbl-fuel" class="fuel-num">120</span>
+            </div>
+          </div>
+
+          <!-- 2. Cannon Angle -->
+          <div class="ctrl-group angle-group">
+            <button id="btn-angle-down" class="pad-btn sm" type="button">▼</button>
+            <div class="angle-readout">
+              <span class="ang-lbl">각도</span>
+              <strong id="lbl-angle">45°</strong>
+            </div>
+            <button id="btn-angle-up" class="pad-btn sm" type="button">▲</button>
+          </div>
+
+          <!-- 3. Power Bar + Fire Button -->
+          <div class="ctrl-group power-fire-group">
+            <div class="power-box">
+              <div class="power-top-row">
+                <button id="btn-power-minus" class="micro-btn" type="button">－</button>
+                <span class="pwr-label">파워 <strong id="lbl-power">58</strong></span>
+                <button id="btn-power-plus" class="micro-btn" type="button">＋</button>
+              </div>
+              <div id="power-gauge-track" class="power-track" title="터치/드래그하여 파워 조절 (주황색 눈금 = 직전 발사 파워)">
+                <div class="power-ticks">
+                  <span></span><span></span><span></span>
+                </div>
+                <div id="power-gauge-fill" class="power-fill" style="width: 58%;"></div>
+                <div id="power-last-marker" class="power-last-marker hidden" title="이전 턴 발사 파워"></div>
+                <div id="power-thumb" class="power-thumb" style="left: 58%;"></div>
+              </div>
+            </div>
+
+            <button id="btn-fire" class="fire-btn" type="button">
+              <span class="fire-ico">🔥</span>
+              <span class="fire-txt">발사!</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </div>
+
+  <!-- ==========================================
+       MATCH OVER / RANKING MODAL
+       ========================================== -->
+  <div id="gameover-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true">
+    <div class="modal-card">
+      <div id="modal-result-badge" class="result-badge win">VICTORY</div>
+      <h2 id="modal-result-title" class="modal-title">🏆 최종 승리!</h2>
+      <p id="modal-result-sub" class="modal-sub">전장을 완벽히 제압했습니다</p>
+
+      <div id="modal-ranking-list" class="ranking-list"></div>
+
+      <div class="modal-actions">
+        <button id="btn-modal-rematch" class="modal-btn primary" type="button">🔄 새 맵에서 다시하기</button>
+        <button id="btn-modal-exit" class="modal-btn secondary" type="button">🚪 나가기</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==========================================
+       SHORTCUT / PWA INSTALL MODAL
+       ========================================== -->
+  <div id="install-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true">
+    <div class="modal-card install-modal-card">
+      <img src="icon-192.png" onerror="this.onerror=null;this.src='icon.svg';" alt="대포대전" class="install-preview-icon" />
+      <div class="result-badge win">SHORTCUT</div>
+      <h2 class="modal-title">바탕화면 아이콘 추가</h2>
+      <p id="install-desc" class="modal-sub">PC 바탕화면 또는 스마트폰 홈 화면에 대포대전 바로가기 아이콘을 추가할까요?</p>
+      <div id="install-guide-box" class="install-guide hidden"></div>
+      <div class="modal-actions">
+        <button id="btn-install-confirm" class="modal-btn primary" type="button">✨ 설치하기</button>
+        <button id="btn-install-later" class="modal-btn secondary" type="button">나중에</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="engine.js"></script>
+  <script src="game.js"></script>
+</body>
+</html>
