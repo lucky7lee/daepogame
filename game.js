@@ -831,46 +831,67 @@
   // ==========================================
   // Turn Shot & Crater Playback Sequencer
   // ==========================================
-  function spawnExplosionVisual(x, y, radius, isTeleport = false) {
+  function spawnExplosionVisual(x, y, radius, weaponId = 'normal') {
+    const isTeleport = weaponId === 'teleport' || weaponId === true;
     if (isTeleport) {
       playHealOrTeleportSound(true);
-      app.explosions.push({ x, y, maxR: 48, age: 0, dur: 0.48, color: '#38bdf8' });
-      for (let i = 0; i < 24; i++) {
-        const ang = (Math.PI * 2 * i) / 24;
-        const spd = 60 + Math.random() * 140;
+      app.explosions.push({ x, y, maxR: 54, age: 0, dur: 0.52, kind: 'teleport', color: '#22d3ee' });
+      for (let i = 0; i < 28; i++) {
+        const ang = (Math.PI * 2 * i) / 28;
+        const spd = 65 + Math.random() * 150;
         app.particles.push({
           x,
           y,
           vx: Math.cos(ang) * spd,
           vy: Math.sin(ang) * spd,
-          r: 2.5 + Math.random() * 2.5,
-          color: i % 2 === 0 ? '#38bdf8' : '#e0f2fe',
-          life: 0.55,
-          maxLife: 0.55,
+          r: 2.5 + Math.random() * 2.8,
+          color: i % 3 === 0 ? '#c084fc' : i % 2 === 0 ? '#22d3ee' : '#ecfeff',
+          life: 0.58,
+          maxLife: 0.58,
           gravity: 0
         });
       }
       return;
     }
 
+    const isPower = weaponId === 'power';
+    const isDouble = weaponId === 'double';
     playExplosionSound(radius);
-    app.camera.shake = Math.min(18, 6 + radius * 0.16);
-    app.explosions.push({ x, y, maxR: radius * 1.35, age: 0, dur: 0.52, color: '#f97316' });
+    app.camera.shake = Math.min(isPower ? 24 : 18, (isPower ? 10 : 6) + radius * 0.16);
+    app.explosions.push({
+      x,
+      y,
+      maxR: radius * (isPower ? 1.55 : 1.35),
+      age: 0,
+      dur: isPower ? 0.68 : 0.52,
+      kind: isPower ? 'power' : isDouble ? 'double' : 'normal',
+      color: isPower ? '#ef4444' : '#f97316'
+    });
     app.scorchMarks.push({ x, y, r: radius * 1.08 });
     if (app.scorchMarks.length > 40) app.scorchMarks.shift();
 
-    const count = Math.min(48, 18 + Math.round(radius * 0.45));
+    const count = Math.min(isPower ? 64 : 48, 18 + Math.round(radius * (isPower ? 0.62 : 0.45)));
     for (let i = 0; i < count; i++) {
       const ang = -Math.PI + Math.random() * Math.PI * 2;
-      const spd = 70 + Math.random() * (180 + radius * 2.2);
+      const spd = 70 + Math.random() * (180 + radius * (isPower ? 2.8 : 2.2));
       const fire = i % 3 !== 0;
+      let pCol = '#78350f';
+      if (fire) {
+        if (isPower) {
+          pCol = i % 2 === 0 ? '#fde047' : '#ef4444';
+        } else if (isDouble) {
+          pCol = i % 2 === 0 ? '#38bdf8' : '#fb923c';
+        } else {
+          pCol = Math.random() > 0.45 ? '#fbbf24' : '#ef4444';
+        }
+      }
       app.particles.push({
         x,
         y,
         vx: Math.cos(ang) * spd,
         vy: Math.sin(ang) * spd - 65,
-        r: fire ? 2.5 + Math.random() * 3.5 : 3 + Math.random() * 3,
-        color: fire ? (Math.random() > 0.45 ? '#fbbf24' : '#ef4444') : '#78350f',
+        r: fire ? 2.5 + Math.random() * (isPower ? 4.4 : 3.5) : 3 + Math.random() * 3,
+        color: pCol,
         life: 0.55 + Math.random() * 0.45,
         maxLife: 0.95,
         gravity: 340
@@ -951,27 +972,41 @@
       app.camera.mode = 'followShell';
       updateFloatingRecenterBtn();
 
-      // Muzzle puff particles
+      // Weapon-specific Muzzle Flash Particles
       const startPt = pts[0];
-      for (let i = 0; i < 10; i++) {
+      const wpnId = result.weaponId || 'normal';
+      const muzzleColor =
+        wpnId === 'teleport'
+          ? '#67e8f9'
+          : wpnId === 'power'
+          ? '#fde047'
+          : wpnId === 'double'
+          ? '#fb923c'
+          : '#e2e8f0';
+      for (let i = 0; i < 12; i++) {
         app.particles.push({
           x: startPt.x,
           y: startPt.y,
-          vx: (Math.random() * 2 - 1) * 75,
-          vy: (Math.random() * 2 - 1) * 75,
-          r: 3 + Math.random() * 3,
-          color: '#e2e8f0',
-          life: 0.35,
-          maxLife: 0.35,
+          vx: (Math.random() * 2 - 1) * 85,
+          vy: (Math.random() * 2 - 1) * 85,
+          r: 2.8 + Math.random() * 3.2,
+          color: i % 2 === 0 ? muzzleColor : '#ffffff',
+          life: 0.36,
+          maxLife: 0.36,
           gravity: -20
         });
       }
 
+      const initAng =
+        pts.length > 1 ? Math.atan2(pts[1].y - pts[0].y, pts[1].x - pts[0].x) : 0;
+
       app.activeShell = {
         points: pts,
         cursor: 0,
-        weaponId: result.weaponId,
-        trail: [],
+        weaponId: wpnId,
+        shotNumber: projIdx,
+        head: { x: startPt.x, y: startPt.y, angle: initAng },
+        trail: [{ x: startPt.x, y: startPt.y, angle: initAng }],
         onImpact: () => {
           app.activeShell = null;
 
@@ -985,8 +1020,8 @@
             }
           }
 
-          if (result.weaponId === 'teleport') {
-            spawnExplosionVisual(proj.hitX, proj.hitY, 36, true);
+          if (wpnId === 'teleport') {
+            spawnExplosionVisual(proj.hitX, proj.hitY, 36, 'teleport');
             if (shooter && proj.hitType !== 'water' && proj.hitType !== 'out') {
               shooter.x = Engine.clamp(proj.hitX, 45, Engine.WORLD_WIDTH - 45);
               shooter.y = Engine.getTerrainY(app.renderMatch.terrain, shooter.x);
@@ -1002,7 +1037,7 @@
               dur: 1.0
             });
           } else if (proj.hitType !== 'out') {
-            spawnExplosionVisual(proj.hitX, proj.hitY, proj.craterRadius || 42, false);
+            spawnExplosionVisual(proj.hitX, proj.hitY, proj.craterRadius || 42, wpnId);
           }
 
           // Show floating damage numbers for this projectile
@@ -1412,22 +1447,42 @@
       }
     }
 
-    // Flying Projectile Playback
+    // Flying Projectile Playback (Sub-frame interpolated position + tangent velocity orientation)
     if (app.activeShell) {
       const sh = app.activeShell;
-      // Each point in sh.points was sampled every 3/120s = 0.025s -> 40 pts/sec (slightly sped up 46 pts/sec for snappy feel)
       sh.cursor += dt * 46;
-      const idx = Math.min(sh.points.length - 1, Math.floor(sh.cursor));
-      const pt = sh.points[idx];
-      sh.trail.push({ x: pt.x, y: pt.y });
-      if (sh.trail.length > 28) sh.trail.shift();
+      const maxIdx = sh.points.length - 1;
+      const clampedCursor = Math.min(maxIdx, sh.cursor);
+      const idx = Math.floor(clampedCursor);
+      const nextIdx = Math.min(maxIdx, idx + 1);
+      const frac = clampedCursor - idx;
+
+      const p0 = sh.points[idx];
+      const p1 = sh.points[nextIdx];
+      const curX = p0.x + (p1.x - p0.x) * frac;
+      const curY = p0.y + (p1.y - p0.y) * frac;
+
+      const angA = sh.points[Math.max(0, idx - 1)];
+      const angB = sh.points[Math.min(maxIdx, idx + 1)];
+      const dAngX = angB.x - angA.x;
+      const dAngY = angB.y - angA.y;
+      const curAngle =
+        Math.abs(dAngX) + Math.abs(dAngY) > 0.01
+          ? Math.atan2(dAngY, dAngX)
+          : sh.head
+          ? sh.head.angle
+          : 0;
+
+      sh.head = { x: curX, y: curY, angle: curAngle };
+      sh.trail.push({ x: curX, y: curY, angle: curAngle });
+      if (sh.trail.length > 30) sh.trail.shift();
 
       // Smooth horizontal camera scroll following projectile!
       if (app.camera.mode === 'followShell') {
-        centerCameraOnWorldX(pt.x, false);
+        centerCameraOnWorldX(curX, false);
       }
 
-      if (sh.cursor >= sh.points.length - 1) {
+      if (sh.cursor >= maxIdx) {
         const cb = sh.onImpact;
         if (cb) cb();
       }
@@ -1615,25 +1670,9 @@
       drawTank(ctx, p, terrain, isTurn, nowMs);
     }
 
-    // 8. Active Flying Shell + Smoke Trail
+    // 8. Active Flying Projectile + Weapon-Specific Trail (Distinct Silhouette per Shell Type!)
     if (app.activeShell && app.activeShell.trail.length > 0) {
-      const sh = app.activeShell;
-      for (let i = 0; i < sh.trail.length; i++) {
-        const pt = sh.trail[i];
-        const ratio = (i + 1) / sh.trail.length;
-        ctx.fillStyle =
-          sh.weaponId === 'teleport'
-            ? `rgba(56, 189, 248, ${ratio * 0.65})`
-            : `rgba(251, 191, 36, ${ratio * 0.55})`;
-        ctx.beginPath();
-        ctx.arc(pt.x, pt.y, 2 + ratio * 5, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      const head = sh.trail[sh.trail.length - 1];
-      ctx.fillStyle = sh.weaponId === 'teleport' ? '#bae6fd' : '#fef08a';
-      ctx.beginPath();
-      ctx.arc(head.x, head.y, sh.weaponId === 'power' ? 9 : 6.5, 0, Math.PI * 2);
-      ctx.fill();
+      drawActiveProjectile(ctx, app.activeShell, nowMs);
     }
 
     // 9. Explosion Shockwaves & Particles
@@ -1642,13 +1681,41 @@
       const r = ex.maxR * Math.pow(t, 0.45);
       const alpha = Math.max(0, 1 - t);
       const grad = ctx.createRadialGradient(ex.x, ex.y, 0, ex.x, ex.y, r);
-      grad.addColorStop(0, `rgba(254, 249, 195, ${alpha})`);
-      grad.addColorStop(0.5, `rgba(249, 115, 22, ${alpha * 0.8})`);
-      grad.addColorStop(1, 'rgba(239, 68, 68, 0)');
+
+      if (ex.kind === 'teleport') {
+        grad.addColorStop(0, `rgba(236, 254, 255, ${alpha})`);
+        grad.addColorStop(0.45, `rgba(34, 211, 238, ${alpha * 0.85})`);
+        grad.addColorStop(0.8, `rgba(168, 85, 247, ${alpha * 0.55})`);
+        grad.addColorStop(1, 'rgba(139, 92, 246, 0)');
+      } else if (ex.kind === 'power') {
+        grad.addColorStop(0, `rgba(255, 255, 255, ${alpha})`);
+        grad.addColorStop(0.35, `rgba(254, 240, 138, ${alpha * 0.95})`);
+        grad.addColorStop(0.68, `rgba(239, 68, 68, ${alpha * 0.85})`);
+        grad.addColorStop(1, 'rgba(153, 27, 27, 0)');
+      } else {
+        grad.addColorStop(0, `rgba(254, 249, 195, ${alpha})`);
+        grad.addColorStop(0.5, `rgba(249, 115, 22, ${alpha * 0.8})`);
+        grad.addColorStop(1, 'rgba(239, 68, 68, 0)');
+      }
+
       ctx.fillStyle = grad;
       ctx.beginPath();
       ctx.arc(ex.x, ex.y, r, 0, Math.PI * 2);
       ctx.fill();
+
+      // Expanding crisp outer shockwave ring for Power Bomb & Teleport Warp
+      if (ex.kind === 'power' || ex.kind === 'teleport') {
+        ctx.save();
+        ctx.strokeStyle =
+          ex.kind === 'teleport'
+            ? `rgba(103, 232, 249, ${alpha * 0.9})`
+            : `rgba(254, 240, 138, ${alpha * 0.9})`;
+        ctx.lineWidth = ex.kind === 'power' ? 4 : 2.8;
+        ctx.beginPath();
+        ctx.arc(ex.x, ex.y, r * 1.14, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      }
     }
 
     for (const pt of app.particles) {
@@ -1697,6 +1764,315 @@
 
     // 12. Off-Screen Opponent Edge Pointers (crucial for Smartphone Horizontal Scroll!)
     drawOffscreenEnemyPointers(ctx, match, activePlayer, scale, extraMarginPx);
+
+    ctx.restore();
+  }
+
+  // Distinct Flying Projectile & Trail Renderer per Shell Type ('normal' | 'double' | 'power' | 'teleport')
+  function drawActiveProjectile(ctx, sh, nowMs) {
+    const trail = sh.trail;
+    const head = sh.head || trail[trail.length - 1];
+    if (!head) return;
+
+    const wpn = sh.weaponId || 'normal';
+    const pScale = isSmartphoneScreen()
+      ? Engine.clamp(getMobileTankBoost() * 0.86, 1.28, 1.58)
+      : 1.15;
+
+    ctx.save();
+
+    // ==========================================
+    // 1. WEAPON-SPECIFIC FLIGHT TRAIL
+    // ==========================================
+    if (wpn === 'teleport') {
+      // Teleport Orb Trail: Alternating Neon Cyan & Electric Violet Dimensional Portal Rings!
+      for (let i = 0; i < trail.length; i += 2) {
+        const pt = trail[i];
+        const ratio = (i + 1) / trail.length;
+        ctx.save();
+        ctx.translate(pt.x, pt.y);
+        ctx.rotate((pt.angle || 0) + i * 0.35);
+        ctx.strokeStyle =
+          i % 4 === 0
+            ? `rgba(34, 211, 238, ${ratio * 0.82})`
+            : `rgba(192, 132, 252, ${ratio * 0.78})`;
+        ctx.lineWidth = (1.4 + ratio * 1.4) * pScale * 0.8;
+        ctx.beginPath();
+        ctx.ellipse(0, 0, (2.5 + ratio * 6.5) * pScale * 0.85, (1.4 + ratio * 3.8) * pScale * 0.85, 0, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      }
+    } else if (wpn === 'power') {
+      // Heavy High-Explosive Nuke Trail: Thick Dark Charcoal Smoke + Expanding Fiery Magma Shock Rings!
+      for (let i = 0; i < trail.length; i++) {
+        const pt = trail[i];
+        const ratio = (i + 1) / trail.length;
+        ctx.fillStyle =
+          ratio > 0.68
+            ? `rgba(239, 68, 68, ${ratio * 0.65})`
+            : `rgba(30, 41, 59, ${ratio * 0.58})`;
+        ctx.beginPath();
+        ctx.arc(pt.x, pt.y, (3.2 + (1 - ratio) * 5.5) * pScale * 0.85, 0, Math.PI * 2);
+        ctx.fill();
+
+        if (i % 5 === 0) {
+          ctx.strokeStyle = `rgba(250, 204, 21, ${ratio * 0.72})`;
+          ctx.lineWidth = 1.8;
+          ctx.beginPath();
+          ctx.arc(pt.x, pt.y, (5 + (1 - ratio) * 7) * pScale * 0.82, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+      }
+    } else if (wpn === 'double') {
+      // Double-Shot Rocket Trail: Crisp Twin Parallel Supersonic Jet Contrails!
+      const offset = 3.4 * pScale;
+      for (const side of [-1, 1]) {
+        ctx.beginPath();
+        for (let i = 0; i < trail.length; i++) {
+          const pt = trail[i];
+          const nx = -Math.sin(pt.angle || 0) * offset * side;
+          const ny = Math.cos(pt.angle || 0) * offset * side;
+          if (i === 0) ctx.moveTo(pt.x + nx, pt.y + ny);
+          else ctx.lineTo(pt.x + nx, pt.y + ny);
+        }
+        ctx.strokeStyle = side < 0 ? 'rgba(56, 189, 248, 0.78)' : 'rgba(251, 146, 60, 0.82)';
+        ctx.lineWidth = 2.4 * pScale * 0.85;
+        ctx.lineCap = 'round';
+        ctx.stroke();
+      }
+      // Bright inner jet sparks
+      for (let i = Math.max(0, trail.length - 10); i < trail.length; i += 2) {
+        const pt = trail[i];
+        const ratio = (i + 1) / trail.length;
+        ctx.fillStyle = `rgba(254, 240, 138, ${ratio * 0.8})`;
+        ctx.beginPath();
+        ctx.arc(pt.x, pt.y, 2.2 * pScale * 0.85, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    } else {
+      // Normal Cannon Shell Trail: Classic Artillery White-Gray Propellant Smoke Puffs
+      for (let i = 0; i < trail.length; i++) {
+        const pt = trail[i];
+        const ratio = (i + 1) / trail.length;
+        ctx.fillStyle =
+          ratio > 0.78
+            ? `rgba(251, 191, 36, ${ratio * 0.62})`
+            : `rgba(226, 232, 240, ${ratio * 0.5})`;
+        ctx.beginPath();
+        ctx.arc(pt.x, pt.y, (1.8 + ratio * 3.8) * pScale * 0.85, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    // ==========================================
+    // 2. WEAPON-SPECIFIC PROJECTILE HEAD BODY
+    // ==========================================
+    ctx.translate(head.x, head.y);
+
+    if (wpn === 'teleport') {
+      // === TELEPORT ORB: Spinning Dual-Ring Dimensional Warp Gyroscope ===
+      ctx.scale(pScale, pScale);
+      const spin = (nowMs || 0) * 0.011;
+
+      // Outer warp glow
+      const aura = ctx.createRadialGradient(0, 0, 1, 0, 0, 15);
+      aura.addColorStop(0, 'rgba(236, 254, 255, 0.95)');
+      aura.addColorStop(0.5, 'rgba(34, 211, 238, 0.55)');
+      aura.addColorStop(1, 'rgba(168, 85, 247, 0)');
+      ctx.fillStyle = aura;
+      ctx.beginPath();
+      ctx.arc(0, 0, 15, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Tilted Orbital Ring 1 (Neon Cyan)
+      ctx.save();
+      ctx.rotate(spin);
+      ctx.strokeStyle = '#22d3ee';
+      ctx.lineWidth = 2.2;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, 12.5, 4.8, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+
+      // Counter-Rotating Orbital Ring 2 (Electric Violet)
+      ctx.save();
+      ctx.rotate(-spin * 1.25 + Math.PI * 0.38);
+      ctx.strokeStyle = '#c084fc';
+      ctx.lineWidth = 2.2;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, 12.5, 4.8, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+
+      // Spinning 4-point Star / Quantum Diamond Core
+      ctx.save();
+      ctx.rotate(spin * 1.8);
+      ctx.fillStyle = '#ffffff';
+      ctx.strokeStyle = '#0891b2';
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.moveTo(0, -6.5);
+      ctx.lineTo(4.2, 0);
+      ctx.lineTo(0, 6.5);
+      ctx.lineTo(-4.2, 0);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+    } else if (wpn === 'power') {
+      // === HIGH-EXPLOSIVE POWER BOMB: Giant Bulbous "Fat-Man" Heavy Warhead ===
+      ctx.rotate(head.angle || 0);
+      ctx.scale(pScale, pScale);
+
+      // Pulsing danger red shock aura
+      const pulse = 1 + Math.sin((nowMs || 0) * 0.025) * 0.14;
+      ctx.fillStyle = 'rgba(239, 68, 68, 0.28)';
+      ctx.beginPath();
+      ctx.arc(0, 0, 16 * pulse, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Rear boxy bomb stabilizer tail assembly
+      ctx.fillStyle = '#475569';
+      ctx.strokeStyle = '#090d16';
+      ctx.lineWidth = 1.8;
+      ctx.beginPath();
+      ctx.moveTo(-16, -8.5);
+      ctx.lineTo(-9, -5.5);
+      ctx.lineTo(-9, 5.5);
+      ctx.lineTo(-16, 8.5);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      // Fat armored charcoal warhead body
+      ctx.fillStyle = '#1e293b';
+      ctx.beginPath();
+      ctx.ellipse(0, 0, 12.5, 8.8, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      // Vivid Yellow Hazard Warning Band around belly
+      ctx.fillStyle = '#facc15';
+      ctx.fillRect(-3.5, -8.2, 6.5, 16.4);
+      ctx.strokeRect(-3.5, -8.2, 6.5, 16.4);
+
+      // Glowing Red-Hot Armed Nose Fuse
+      ctx.fillStyle = '#ef4444';
+      ctx.beginPath();
+      ctx.arc(10.5, 0, 4.2, -Math.PI * 0.5, Math.PI * 0.5);
+      ctx.fill();
+      ctx.stroke();
+
+      // Blinking White-Yellow Fuse Tip Spark
+      ctx.fillStyle = '#fef08a';
+      ctx.beginPath();
+      ctx.arc(13.5, 0, 2.2 * pulse, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Center Hazard Core Dot
+      ctx.fillStyle = '#dc2626';
+      ctx.beginPath();
+      ctx.arc(-0.2, 0, 2.5, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (wpn === 'double') {
+      // === DOUBLE-SHOT MISSILE: Sleek Winged Supersonic Guided Rocket ===
+      ctx.rotate(head.angle || 0);
+      ctx.scale(pScale, pScale);
+
+      // Flickering Jet Thruster Flame at Rear Nozzle
+      const jetLen = 10 + Math.sin((nowMs || 0) * 0.06) * 4;
+      ctx.fillStyle = '#f97316';
+      ctx.beginPath();
+      ctx.moveTo(-11, -3.4);
+      ctx.lineTo(-11 - jetLen, 0);
+      ctx.lineTo(-11, 3.4);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.fillStyle = '#fef08a';
+      ctx.beginPath();
+      ctx.moveTo(-11, -1.8);
+      ctx.lineTo(-11 - jetLen * 0.62, 0);
+      ctx.lineTo(-11, 1.8);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.strokeStyle = '#090d16';
+      ctx.lineWidth = 1.6;
+
+      // Swept Delta Rear Tail Fins (Top & Bottom)
+      ctx.fillStyle = '#dc2626';
+      ctx.beginPath();
+      ctx.moveTo(-11, -3.5);
+      ctx.lineTo(-14, -8.5);
+      ctx.lineTo(-5, -3.5);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.moveTo(-11, 3.5);
+      ctx.lineTo(-14, 8.5);
+      ctx.lineTo(-5, 3.5);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      // Slender White-Silver Rocket Fuselage
+      ctx.fillStyle = '#f8fafc';
+      ctx.beginPath();
+      ctx.roundRect(-11, -3.6, 17, 7.2, 2);
+      ctx.fill();
+      ctx.stroke();
+
+      // Cyan/Blue Tactical Stripe (1st vs 2nd shot accent)
+      ctx.fillStyle = sh.shotNumber === 2 ? '#a855f7' : '#0ea5e9';
+      ctx.fillRect(-3, -3.2, 4.5, 6.4);
+
+      // Sharp Pointed Scarlet Nose Cone
+      ctx.fillStyle = '#ef4444';
+      ctx.beginPath();
+      ctx.moveTo(6, -3.8);
+      ctx.lineTo(15.5, 0);
+      ctx.lineTo(6, 3.8);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    } else {
+      // === NORMAL SHELL: Classic Pointed Brass & Gunmetal Artillery Projectile ===
+      ctx.rotate(head.angle || 0);
+      ctx.scale(pScale, pScale);
+
+      // Subtle hot base tracer glow
+      ctx.fillStyle = 'rgba(251, 146, 60, 0.75)';
+      ctx.beginPath();
+      ctx.arc(-8.5, 0, 3.2, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.strokeStyle = '#090d16';
+      ctx.lineWidth = 1.7;
+
+      // Cylindrical Gunmetal Shell Casing
+      ctx.fillStyle = '#475569';
+      ctx.beginPath();
+      ctx.roundRect(-8, -4.2, 9.5, 8.4, 2);
+      ctx.fill();
+      ctx.stroke();
+
+      // Copper/Gold Driving Band
+      ctx.fillStyle = '#f59e0b';
+      ctx.fillRect(-2, -4.1, 3, 8.2);
+
+      // Pointed Ogive Steel-Gold Warhead Tip
+      ctx.fillStyle = '#fde047';
+      ctx.beginPath();
+      ctx.moveTo(1.5, -4.2);
+      ctx.quadraticCurveTo(8.5, -3.6, 11.5, 0);
+      ctx.quadraticCurveTo(8.5, 3.6, 1.5, 4.2);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    }
 
     ctx.restore();
   }
@@ -2310,12 +2686,20 @@
       miniCtx.fill();
     }
 
-    // Active shell dot on minimap
+    // Active shell dot on minimap (color-coded by shell type)
     if (app.activeShell && app.activeShell.trail.length > 0) {
-      const hd = app.activeShell.trail[app.activeShell.trail.length - 1];
-      miniCtx.fillStyle = '#fef08a';
+      const hd = app.activeShell.head || app.activeShell.trail[app.activeShell.trail.length - 1];
+      const wId = app.activeShell.weaponId;
+      miniCtx.fillStyle =
+        wId === 'teleport'
+          ? '#22d3ee'
+          : wId === 'power'
+          ? '#ef4444'
+          : wId === 'double'
+          ? '#fb923c'
+          : '#fef08a';
       miniCtx.beginPath();
-      miniCtx.arc((hd.x / Engine.WORLD_WIDTH) * w, (hd.y / Engine.WORLD_HEIGHT) * h, 2.5 * viewDpr, 0, Math.PI * 2);
+      miniCtx.arc((hd.x / Engine.WORLD_WIDTH) * w, (hd.y / Engine.WORLD_HEIGHT) * h, 2.8 * viewDpr, 0, Math.PI * 2);
       miniCtx.fill();
     }
 
