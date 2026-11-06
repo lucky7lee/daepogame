@@ -108,7 +108,7 @@
       id: 'power',
       name: '고폭탄',
       icon: '☢️',
-      ammo: 1,
+      ammo: 2,
       shots: 1,
       baseDamage: 62,
       splashRadius: 96,
