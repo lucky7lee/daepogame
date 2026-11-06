@@ -360,6 +360,22 @@
     return viewCssH / Engine.WORLD_HEIGHT;
   }
 
+  // Detect smartphone screens so tanks & nicknames are boosted ONLY on smartphones (PC unchanged!)
+  function isSmartphoneScreen() {
+    const w = window.innerWidth || viewCssW;
+    const h = window.innerHeight || viewCssH;
+    const shortSide = Math.min(w, h);
+    const coarse = Boolean(window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
+    return shortSide <= 680 || (coarse && shortSide <= 920);
+  }
+
+  function getMobileTankBoost() {
+    if (!isSmartphoneScreen()) return 1.0; // PC keeps exact original 1.0 ratio
+    const ws = Math.max(0.22, getWorldScale());
+    // Scale up tanks relative to map on smartphones (approx 1.95x in portrait, up to 2.85x in short landscape)
+    return Engine.clamp(0.96 / ws, 1.95, 2.85);
+  }
+
   function getVisibleWorldWidth() {
     return viewCssW / getWorldScale();
   }
@@ -1593,12 +1609,13 @@
 
     // 11. Floating Damage / Heal Popups
     ctx.textAlign = 'center';
-    ctx.font = '900 22px Pretendard, Malgun Gothic, sans-serif';
+    const popupFontPx = isSmartphoneScreen() ? Math.round(Engine.clamp(17 / Math.max(0.24, scale), 26, 54)) : 22;
+    ctx.font = `900 ${popupFontPx}px Pretendard, Malgun Gothic, sans-serif`;
     for (const ft of app.floatingTexts) {
       const alpha = Math.max(0, 1 - ft.age / ft.dur);
       ctx.globalAlpha = alpha;
-      ctx.lineWidth = 4;
-      ctx.strokeStyle = 'rgba(0,0,0,0.85)';
+      ctx.lineWidth = isSmartphoneScreen() ? 5.5 : 4;
+      ctx.strokeStyle = 'rgba(0,0,0,0.88)';
       ctx.strokeText(ft.text, ft.x, ft.y);
       ctx.fillStyle = ft.color;
       ctx.fillText(ft.text, ft.x, ft.y);
@@ -1641,20 +1658,374 @@
     ctx.restore();
   }
 
+  // Draw distinct barrel per tankType ('cannon' | 'duke' | 'multi' | 'laser')
+  function drawTankBarrelByType(ctx, tankType, color, colorLight, nowMs) {
+    const len = Engine.BARREL_LENGTH;
+    ctx.strokeStyle = '#090d16';
+    ctx.lineWidth = 2;
+
+    if (tankType === 'duke') {
+      // Heavy Duke: Thick twin siege cannons + hydraulic recoil damper + flared heavy muzzle
+      ctx.fillStyle = '#475569';
+      ctx.beginPath();
+      ctx.roundRect(-2, -8.5, 14, 17, 3);
+      ctx.fill();
+      ctx.stroke();
+
+      // Upper & lower heavy barrels
+      ctx.fillStyle = '#cbd5e1';
+      ctx.beginPath();
+      ctx.roundRect(6, -7.2, len - 2, 6.2, 2);
+      ctx.roundRect(6, 1.0, len - 2, 6.2, 2);
+      ctx.fill();
+      ctx.stroke();
+
+      // Heavy armored siege muzzle block
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.roundRect(len - 3, -8.8, 8, 17.6, 2);
+      ctx.fill();
+      ctx.stroke();
+    } else if (tankType === 'multi') {
+      // Crater Multi: Wide 3-tube rocket / heavy mortar pod with glowing warhead tips
+      ctx.fillStyle = '#334155';
+      ctx.beginPath();
+      ctx.roundRect(0, -8.5, len - 3, 17, 4);
+      ctx.fill();
+      ctx.stroke();
+
+      // Caution stripe band
+      ctx.fillStyle = color;
+      ctx.fillRect(6, -7.5, 6, 15);
+
+      // 3 stacked rocket warhead tips peeking out
+      const ys = [-5, 0, 5];
+      for (const wy of ys) {
+        ctx.fillStyle = '#f97316';
+        ctx.beginPath();
+        ctx.arc(len - 2, wy, 2.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    } else if (tankType === 'laser') {
+      // Speed Laser: Long futuristic twin-prong railgun with glowing energy core
+      const longLen = len + 5;
+      // Glowing plasma core beam inside rails
+      ctx.strokeStyle = '#67e8f9';
+      ctx.lineWidth = 2.6;
+      ctx.beginPath();
+      ctx.moveTo(4, 0);
+      ctx.lineTo(longLen, 0);
+      ctx.stroke();
+
+      // Top & bottom electromagnetic rails
+      ctx.strokeStyle = '#090d16';
+      ctx.lineWidth = 1.6;
+      ctx.fillStyle = '#e2e8f0';
+      ctx.beginPath();
+      ctx.roundRect(2, -6, longLen - 2, 3.4, 1.5);
+      ctx.roundRect(2, 2.6, longLen - 2, 3.4, 1.5);
+      ctx.fill();
+      ctx.stroke();
+
+      // Energy coil rings
+      ctx.fillStyle = color;
+      ctx.fillRect(11, -6.8, 3.5, 13.6);
+      ctx.fillRect(20, -6.8, 3.5, 13.6);
+    } else {
+      // Classic Cannon: Balanced cylindrical steel barrel + classic muzzle brake
+      ctx.fillStyle = '#cbd5e1';
+      ctx.beginPath();
+      ctx.roundRect(0, -4.5, len, 9, 3);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.roundRect(len - 6, -6, 7, 12, 2);
+      ctx.fill();
+      ctx.stroke();
+    }
+  }
+
+  // Draw distinct hull, treads/hover-pads, and turret per tankType
+  // Drawn in local tank coordinates where (0,0) is ground contact and +X is forward!
+  function drawTankBodyByType(ctx, tankType, color, colorDark, colorLight, nowMs) {
+    ctx.strokeStyle = '#090d16';
+    ctx.lineWidth = 2;
+
+    if (tankType === 'duke') {
+      // === HEAVY DUKE (Bulky Siege Tank) ===
+      // Rear twin exhaust stacks
+      ctx.fillStyle = '#475569';
+      ctx.beginPath();
+      ctx.roundRect(-22, -25, 5, 11, 2);
+      ctx.roundRect(-16, -23, 4, 9, 2);
+      ctx.fill();
+      ctx.stroke();
+
+      // Extra-wide armored caterpillar treads
+      ctx.fillStyle = '#1e293b';
+      ctx.beginPath();
+      ctx.roundRect(-24, -11, 48, 11, 4);
+      ctx.fill();
+      ctx.stroke();
+
+      // 6 heavy road wheels
+      ctx.fillStyle = '#94a3b8';
+      for (let wx = -18; wx <= 18; wx += 7.2) {
+        ctx.beginPath();
+        ctx.arc(wx, -5, 2.7, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Armored side skirt plate
+      ctx.fillStyle = colorDark || color;
+      ctx.beginPath();
+      ctx.roundRect(-23, -12, 46, 5, 2);
+      ctx.fill();
+      ctx.stroke();
+
+      // Tall boxy heavy hull
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.moveTo(-21, -11);
+      ctx.lineTo(-19, -20);
+      ctx.lineTo(18, -20);
+      ctx.lineTo(23, -11);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      // Front hazard accent
+      ctx.fillStyle = '#fbbf24';
+      ctx.fillRect(14, -18, 4, 5);
+
+      // Angular M1/Siege style blocky turret
+      ctx.fillStyle = colorLight;
+      ctx.beginPath();
+      ctx.moveTo(-14, -19);
+      ctx.lineTo(-10, -29);
+      ctx.lineTo(10, -29);
+      ctx.lineTo(14, -19);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    } else if (tankType === 'multi') {
+      // === CRATER MULTI (Artillery / Multi-Rocket Carrier) ===
+      // Rugged wide treads
+      ctx.fillStyle = '#1e293b';
+      ctx.beginPath();
+      ctx.roundRect(-22, -10, 44, 10, 5);
+      ctx.fill();
+      ctx.stroke();
+
+      // Caterpillar rollers + orange hubs
+      for (let wx = -15; wx <= 15; wx += 7.5) {
+        ctx.fillStyle = '#f59e0b';
+        ctx.beginPath();
+        ctx.arc(wx, -5, 2.6, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Flat artillery deck chassis + rear ammo rack
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.roundRect(-21, -16, 42, 7.5, 3);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = colorDark || '#334155';
+      ctx.beginPath();
+      ctx.roundRect(-20, -22, 8, 7, 2);
+      ctx.fill();
+      ctx.stroke();
+
+      // Tall bulbous artillery launcher dome + top sensor antenna
+      ctx.fillStyle = colorLight;
+      ctx.beginPath();
+      ctx.roundRect(-11, -29, 22, 14, 7);
+      ctx.fill();
+      ctx.stroke();
+
+      // Radar dish on top
+      ctx.strokeStyle = '#fde047';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(-3, -29);
+      ctx.lineTo(-3, -34);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(-3, -35, 4, Math.PI * 0.2, Math.PI * 0.9);
+      ctx.stroke();
+    } else if (tankType === 'laser') {
+      // === SPEED LASER (Futuristic Hover-Railgun Tank) ===
+      const hoverBob = Math.sin((nowMs || 0) * 0.008) * 1.4;
+      ctx.save();
+      ctx.translate(0, -1.5 + hoverBob);
+
+      // Glowing plasma hover thrusters underneath
+      ctx.fillStyle = 'rgba(56, 189, 248, 0.78)';
+      ctx.beginPath();
+      ctx.ellipse(-11, -1.5, 8, 2.8, 0, 0, Math.PI * 2);
+      ctx.ellipse(11, -1.5, 8, 2.8, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Streamlined sci-fi hover skids
+      ctx.fillStyle = '#0f172a';
+      ctx.strokeStyle = '#38bdf8';
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.moveTo(-22, -4);
+      ctx.lineTo(-17, -9);
+      ctx.lineTo(19, -9);
+      ctx.lineTo(24, -4);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      // Sharp forward-swept wedge hull
+      ctx.strokeStyle = '#090d16';
+      ctx.lineWidth = 2;
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.moveTo(-21, -8);
+      ctx.lineTo(-15, -16);
+      ctx.lineTo(13, -16);
+      ctx.lineTo(25, -9);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      // Sleek stealth prism turret + cyan energy visor
+      ctx.fillStyle = colorLight;
+      ctx.beginPath();
+      ctx.moveTo(-12, -15);
+      ctx.lineTo(-5, -25);
+      ctx.lineTo(8, -24);
+      ctx.lineTo(13, -15);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = '#22d3ee';
+      ctx.beginPath();
+      ctx.roundRect(2, -22, 7, 3.5, 1.5);
+      ctx.fill();
+
+      ctx.restore();
+    } else {
+      // === CLASSIC CANNON (Balanced Standard Tank) ===
+      // Treads
+      ctx.fillStyle = '#1e293b';
+      ctx.beginPath();
+      ctx.roundRect(-20, -9.5, 40, 9.5, 5);
+      ctx.fill();
+      ctx.stroke();
+
+      // 5 Road wheels
+      ctx.fillStyle = '#94a3b8';
+      for (let wx = -13; wx <= 13; wx += 6.5) {
+        ctx.beginPath();
+        ctx.arc(wx, -4.5, 2.4, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Rounded armored hull + front headlight
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.roundRect(-18, -17, 36, 9.5, 5);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = '#fef08a';
+      ctx.beginPath();
+      ctx.arc(14, -12.5, 2.2, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Classic hemispherical dome turret + commander hatch
+      ctx.fillStyle = colorLight;
+      ctx.beginPath();
+      ctx.arc(0, -16, 11.5, Math.PI, 0);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = colorDark || color;
+      ctx.beginPath();
+      ctx.roundRect(-5, -29.5, 8, 3, 1.5);
+      ctx.fill();
+      ctx.stroke();
+    }
+  }
+
+  function getTankLocalPivotY(tankType) {
+    if (tankType === 'duke') return 23;
+    if (tankType === 'multi') return 22;
+    if (tankType === 'laser') return 19;
+    return 18;
+  }
+
+  function renderTankCardPreviews() {
+    document.querySelectorAll('#single-tank-grid .tank-card').forEach((card) => {
+      const tType = card.getAttribute('data-tank') || 'cannon';
+      const icoSpan = card.querySelector('.t-icon');
+      if (!icoSpan) return;
+
+      const cvs = document.createElement('canvas');
+      cvs.width = 128;
+      cvs.height = 76;
+      cvs.style.width = '64px';
+      cvs.style.height = '38px';
+      cvs.style.display = 'block';
+
+      const c = cvs.getContext('2d');
+      c.scale(2, 2);
+      const colors = {
+        cannon: { main: '#38bdf8', dark: '#0284c7', light: '#bae6fd' },
+        duke: { main: '#fb7185', dark: '#e11d48', light: '#fecdd3' },
+        multi: { main: '#fbbf24', dark: '#d97706', light: '#fde68a' },
+        laser: { main: '#34d399', dark: '#059669', light: '#a7f3d0' }
+      };
+      const pal = colors[tType] || colors.cannon;
+      const pivY = getTankLocalPivotY(tType);
+
+      c.save();
+      c.translate(28, 34 - pivY * 0.85);
+      c.rotate((-28 * Math.PI) / 180);
+      c.scale(0.85, 0.85);
+      drawTankBarrelByType(c, tType, pal.main, pal.light, 0);
+      c.restore();
+
+      c.save();
+      c.translate(28, 34);
+      c.scale(0.85, 0.85);
+      drawTankBodyByType(c, tType, pal.main, pal.dark, pal.light, 0);
+      c.restore();
+
+      icoSpan.innerHTML = '';
+      icoSpan.appendChild(cvs);
+    });
+  }
+
   function drawTank(ctx, p, terrain, isActiveTurn, nowMs) {
     const slope = Engine.clamp(Engine.getTerrainSlopeAngle(terrain, p.x), -0.55, 0.55);
+    const isMobile = isSmartphoneScreen();
+    const worldScale = Math.max(0.22, getWorldScale());
+    const tankBoost = getMobileTankBoost(); // 1.0 on PC, ~1.95x-2.85x on Smartphone!
+    const localPivotY = getTankLocalPivotY(p.tankType);
+    const turretOffsetY = localPivotY * tankBoost;
 
     // Draw Fortress Aiming Arc & Sight Line behind active controllable tank
     if (isActiveTurn && !app.isAnimatingTurn) {
       ctx.save();
       const pivotX = p.x;
-      const pivotY = p.y - 16;
-      const arcR = 58;
+      const pivotY = p.y - turretOffsetY;
+      const arcR = 58 * (isMobile ? tankBoost * 0.82 : 1);
 
       // Subtle angle fan
-      ctx.strokeStyle = 'rgba(251, 191, 36, 0.28)';
-      ctx.lineWidth = 2;
-      ctx.setLineDash([4, 4]);
+      ctx.strokeStyle = 'rgba(251, 191, 36, 0.32)';
+      ctx.lineWidth = isMobile ? 3 : 2;
+      ctx.setLineDash([5, 5]);
       ctx.beginPath();
       if (p.facing > 0) {
         ctx.arc(pivotX, pivotY, arcR, (-85 * Math.PI) / 180, (-5 * Math.PI) / 180);
@@ -1667,104 +2038,91 @@
       const rad = (p.angle * Math.PI) / 180;
       const dx = Math.cos(rad) * p.facing;
       const dy = -Math.sin(rad);
-      ctx.strokeStyle = 'rgba(254, 240, 138, 0.78)';
-      ctx.lineWidth = 2.5;
+      const startR = 28 * tankBoost;
+      const endR = (46 + p.power * 0.55) * (isMobile ? tankBoost * 0.85 : 1);
+      ctx.strokeStyle = 'rgba(254, 240, 138, 0.85)';
+      ctx.lineWidth = isMobile ? 3.6 : 2.5;
       ctx.beginPath();
-      ctx.moveTo(pivotX + dx * 28, pivotY + dy * 28);
-      ctx.lineTo(pivotX + dx * (46 + p.power * 0.55), pivotY + dy * (46 + p.power * 0.55));
+      ctx.moveTo(pivotX + dx * startR, pivotY + dy * startR);
+      ctx.lineTo(pivotX + dx * endR, pivotY + dy * endR);
       ctx.stroke();
       ctx.setLineDash([]);
 
       // Bouncing Turn Arrow above active tank
-      const bounce = Math.sin(nowMs * 0.007) * 5;
+      const bounce = Math.sin(nowMs * 0.007) * (5 * (isMobile ? 1.4 : 1));
+      const arrowBaseY = p.y - (isMobile ? 48 * tankBoost + 34 : 64) + bounce;
+      const arrowSize = isMobile ? 13 : 8;
       ctx.fillStyle = '#fbbf24';
       ctx.beginPath();
-      ctx.moveTo(p.x, p.y - 64 + bounce);
-      ctx.lineTo(p.x - 8, p.y - 77 + bounce);
-      ctx.lineTo(p.x + 8, p.y - 77 + bounce);
+      ctx.moveTo(p.x, arrowBaseY);
+      ctx.lineTo(p.x - arrowSize, arrowBaseY - arrowSize * 1.55);
+      ctx.lineTo(p.x + arrowSize, arrowBaseY - arrowSize * 1.55);
       ctx.closePath();
       ctx.fill();
       ctx.restore();
     }
 
-    // Draw Cannon Barrel in World Angle (matches physics muzzle!)
+    // 1. Draw Distinct Cannon Barrel in World Angle (scaled by tankBoost on Smartphone)
     const turretBaseX = p.x;
-    const turretBaseY = p.y - 16;
+    const turretBaseY = p.y - turretOffsetY;
     const rad = (p.angle * Math.PI) / 180;
     const barrelWorldAngle = Math.atan2(-Math.sin(rad), Math.cos(rad) * p.facing);
 
     ctx.save();
     ctx.translate(turretBaseX, turretBaseY);
     ctx.rotate(barrelWorldAngle);
-    ctx.fillStyle = '#cbd5e1';
-    ctx.strokeStyle = '#0f172a';
-    ctx.lineWidth = 2.2;
-    ctx.beginPath();
-    ctx.roundRect(0, -4.5, Engine.BARREL_LENGTH, 9, 3);
-    ctx.fill();
-    ctx.stroke();
-    ctx.fillStyle = p.color;
-    ctx.fillRect(Engine.BARREL_LENGTH - 6, -5.5, 6, 11);
+    ctx.scale(tankBoost, tankBoost);
+    drawTankBarrelByType(ctx, p.tankType, p.color, p.colorLight, nowMs);
     ctx.restore();
 
-    // Draw Chassis & Turret Tilted with Terrain Slope
+    // 2. Draw Distinct Chassis & Turret Tilted with Terrain Slope (anchored at ground p.x, p.y)
     ctx.save();
     ctx.translate(p.x, p.y);
     ctx.rotate(slope * 0.75);
-
-    // Treads
-    ctx.fillStyle = '#1e293b';
-    ctx.strokeStyle = '#090d16';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.roundRect(-20, -9, 40, 10, 5);
-    ctx.fill();
-    ctx.stroke();
-
-    // Tread wheels
-    ctx.fillStyle = '#64748b';
-    for (let wx = -13; wx <= 13; wx += 8.5) {
-      ctx.beginPath();
-      ctx.arc(wx, -4, 2.5, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    // Hull
-    ctx.fillStyle = p.color;
-    ctx.beginPath();
-    ctx.roundRect(-18, -17, 36, 10, 5);
-    ctx.fill();
-    ctx.stroke();
-
-    // Turret Dome
-    ctx.fillStyle = p.colorLight;
-    ctx.beginPath();
-    ctx.arc(0, -16, 11, Math.PI, 0);
-    ctx.closePath();
-    ctx.fill();
-    ctx.stroke();
-
+    ctx.scale(tankBoost * (p.facing < 0 ? -1 : 1), tankBoost);
+    drawTankBodyByType(ctx, p.tankType, p.color, p.colorDark, p.colorLight, nowMs);
     ctx.restore();
 
-    // Overhead HP Bar & Nickname Tag
-    const barW = 46;
-    const barH = 6;
+    // 3. Overhead HP Bar & Nickname Tag (Enlarged & crisp on Smartphone ONLY; unchanged on PC!)
+    const barW = isMobile ? Math.round(44 * tankBoost * 0.88) : 46;
+    const barH = isMobile ? Math.round(6 * tankBoost * 0.78) : 6;
     const bx = p.x - barW * 0.5;
-    const by = p.y - 44;
+    const by = p.y - (isMobile ? 39 * tankBoost + barH : 44);
 
-    ctx.fillStyle = 'rgba(7, 13, 25, 0.82)';
-    ctx.fillRect(bx - 1, by - 1, barW + 2, barH + 2);
+    ctx.fillStyle = 'rgba(7, 13, 25, 0.86)';
+    ctx.fillRect(bx - 1.5, by - 1.5, barW + 3, barH + 3);
     const hpRatio = Engine.clamp(p.hp / p.maxHp, 0, 1);
     ctx.fillStyle = hpRatio > 0.55 ? '#22c55e' : hpRatio > 0.28 ? '#f59e0b' : '#ef4444';
     ctx.fillRect(bx, by, barW * hpRatio, barH);
 
-    ctx.font = '800 13px Pretendard, Malgun Gothic, sans-serif';
+    // On PC: exact original 13px world font. On Smartphone: scaled so CSS size is ~14.5px bold!
+    const fontWorldPx = isMobile ? Math.round(Engine.clamp(14.5 / worldScale, 25, 52)) : 13;
+    ctx.font = `800 ${fontWorldPx}px Pretendard, Malgun Gothic, sans-serif`;
     ctx.textAlign = 'center';
-    ctx.lineWidth = 3;
-    ctx.strokeStyle = 'rgba(0,0,0,0.85)';
-    ctx.strokeText(p.nickname, p.x, by - 5);
-    ctx.fillStyle = isActiveTurn ? '#fde047' : '#f8fafc';
-    ctx.fillText(p.nickname, p.x, by - 5);
+
+    if (isMobile) {
+      // Crisp dark rounded pill behind nickname on small smartphone screens for instant readability
+      const textW = ctx.measureText(p.nickname).width;
+      const padX = fontWorldPx * 0.42;
+      const pillH = fontWorldPx * 1.28;
+      const pillY = by - pillH - 4;
+      ctx.fillStyle = 'rgba(7, 13, 25, 0.76)';
+      ctx.beginPath();
+      ctx.roundRect(p.x - textW * 0.5 - padX, pillY, textW + padX * 2, pillH, pillH * 0.45);
+      ctx.fill();
+
+      ctx.lineWidth = Math.max(3, fontWorldPx * 0.18);
+      ctx.strokeStyle = 'rgba(0,0,0,0.92)';
+      ctx.strokeText(p.nickname, p.x, pillY + pillH * 0.78);
+      ctx.fillStyle = isActiveTurn ? '#fde047' : '#ffffff';
+      ctx.fillText(p.nickname, p.x, pillY + pillH * 0.78);
+    } else {
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = 'rgba(0,0,0,0.85)';
+      ctx.strokeText(p.nickname, p.x, by - 5);
+      ctx.fillStyle = isActiveTurn ? '#fde047' : '#f8fafc';
+      ctx.fillText(p.nickname, p.x, by - 5);
+    }
   }
 
   function drawOffscreenEnemyPointers(ctx, match, activePlayer, scale, extraMarginPx) {
@@ -3296,6 +3654,7 @@
       }
     });
 
+    renderTankCardPreviews();
     setupBattleCanvasDragAndMinimap();
     setupKeyboardControls();
     initShortcutHelper();
