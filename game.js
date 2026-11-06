@@ -902,6 +902,8 @@
     if (result.kind === 'heal') {
       playHealOrTeleportSound(false);
       if (shooter) {
+        shooter.hp = Math.min(shooter.maxHp || 100, shooter.hp + (result.healed || 0));
+        syncPlayersStripUI();
         centerCameraOnWorldX(shooter.x, false);
         app.floatingTexts.push({
           x: shooter.x,
@@ -1207,42 +1209,107 @@
     const strip = document.getElementById('hud-players-strip');
     if (!strip || !app.renderMatch) return;
 
-    const myRef =
-      app.renderMatch.players.find((p) => p.id === app.myClientId) || getActivePlayer();
+    const isLocalPass = app.mode === 'single' && app.singleSubMode === 'local';
+    const myPlayer = !isLocalPass
+      ? app.renderMatch.players.find((p) => p.id === app.myClientId) || app.renderMatch.players[0]
+      : null;
+    const myRef = myPlayer || getActivePlayer();
 
+    // Order cards so MY HP is always shown first (left/top), followed by opponents' HP!
+    const entries = app.renderMatch.players.map((p, idx) => ({ p, idx }));
+    if (myPlayer) {
+      entries.sort((a, b) => {
+        const aMe = a.p.id === myPlayer.id ? 0 : 1;
+        const bMe = b.p.id === myPlayer.id ? 0 : 1;
+        return aMe !== bMe ? aMe - bMe : a.idx - b.idx;
+      });
+    }
+
+    strip.setAttribute('data-count', String(entries.length));
     strip.innerHTML = '';
-    app.renderMatch.players.forEach((p, idx) => {
-      const chip = document.createElement('button');
-      chip.type = 'button';
-      const isTurn = idx === app.renderMatch.turnIndex;
-      chip.className = `p-hud-chip ${isTurn ? 'active-turn' : ''} ${!p.alive ? 'dead' : ''}`;
 
-      const hpPct = Math.max(0, Math.round((p.hp / p.maxHp) * 100));
-      const hpColor = hpPct > 55 ? '#4ade80' : hpPct > 28 ? '#fbbf24' : '#ef4444';
-      const distStr =
-        myRef && myRef.id !== p.id && p.alive
-          ? `<span class="p-hud-dist">${Math.round(Math.abs(p.x - myRef.x))}m</span>`
-          : '';
+    entries.forEach(({ p, idx }) => {
+      const card = document.createElement('button');
+      card.type = 'button';
+      const isMe = Boolean(myPlayer && p.id === myPlayer.id);
+      const isTurn = idx === app.renderMatch.turnIndex && app.renderMatch.status === 'playing';
+      const sideCls = isLocalPass ? 'is-local' : isMe ? 'is-me' : 'is-enemy';
 
-      chip.innerHTML = `
-        <span>${p.badge} ${escapeHtml(p.nickname)}</span>
-        <span class="p-hud-hpbar"><span class="p-hud-hpfill" style="width:${hpPct}%;background:${hpColor};"></span></span>
-        <span>${p.alive ? p.hp : '💀'}</span>
-        ${distStr}
+      card.className = `p-hud-card ${sideCls} ${isTurn ? 'active-turn' : ''} ${!p.alive ? 'dead' : ''}`;
+
+      const curHp = Math.max(0, Math.round(p.hp));
+      const maxHp = Math.max(1, Math.round(p.maxHp || 100));
+      const hpPct = p.alive ? Engine.clamp(Math.round((curHp / maxHp) * 100), 0, 100) : 0;
+
+      const hpBarGrad =
+        hpPct > 55
+          ? 'linear-gradient(90deg, #16a34a, #4ade80)'
+          : hpPct > 28
+          ? 'linear-gradient(90deg, #d97706, #fde047)'
+          : 'linear-gradient(90deg, #dc2626, #fb7185)';
+
+      const hpTextColor = !p.alive
+        ? '#fca5a5'
+        : hpPct > 55
+        ? '#4ade80'
+        : hpPct > 28
+        ? '#fde047'
+        : '#fda4af';
+
+      let roleLabel = '상대';
+      let roleCls = 'role-enemy';
+      if (app.renderMatch.isPractice) {
+        roleLabel = '내 탱크';
+        roleCls = 'role-me';
+      } else if (isLocalPass) {
+        roleLabel = `${idx + 1}P`;
+        roleCls = 'role-local';
+      } else if (isMe) {
+        roleLabel = '나';
+        roleCls = 'role-me';
+      }
+
+      let subMetaHtml = '';
+      if (app.renderMatch.isPractice && isMe) {
+        subMetaHtml = `<span class="p-hud-dist">🎯 ${app.renderMatch.practiceScore || 0}점</span>`;
+      } else if (myRef && myRef.id !== p.id && p.alive) {
+        subMetaHtml = `<span class="p-hud-dist">${Math.round(Math.abs(p.x - myRef.x))}m</span>`;
+      }
+
+      card.innerHTML = `
+        <div class="p-hud-top">
+          <div class="p-hud-ident">
+            <span class="p-role-badge ${roleCls}">${roleLabel}</span>
+            <span class="p-color-dot" style="background:${p.color};"></span>
+            <span class="p-hud-name">${escapeHtml(p.nickname)}</span>
+            ${isTurn ? '<span class="p-turn-tag">턴</span>' : ''}
+          </div>
+          <div class="p-hud-nums">
+            ${subMetaHtml}
+            <span class="p-hud-hpval" style="color:${hpTextColor};">
+              ${p.alive ? `HP <strong>${curHp}</strong><small>/${maxHp}</small>` : '격파 💀'}
+            </span>
+          </div>
+        </div>
+        <div class="p-hud-hpbar">
+          <div class="p-hud-hpfill" style="width:${hpPct}%;background:${hpBarGrad};"></div>
+        </div>
       `;
 
-      chip.addEventListener('click', () => {
+      card.addEventListener('click', () => {
         if (app.isAnimatingTurn) return;
         app.camera.mode = 'manual';
         centerCameraOnWorldX(p.x, false);
         updateFloatingRecenterBtn();
         if (myRef && myRef.id !== p.id) {
           const dx = Math.round(Math.abs(p.x - myRef.x));
-          showToast(`🔭 ${p.nickname} 위치 확인 — 수평 거리 약 ${dx}m`, 1900);
+          showToast(`🔭 ${p.nickname} (HP ${curHp}/${maxHp}) — 거리 약 ${dx}m`, 1900);
+        } else {
+          focusActiveTank(false);
         }
       });
 
-      strip.appendChild(chip);
+      strip.appendChild(card);
     });
   }
 
@@ -2096,8 +2163,8 @@
     ctx.textAlign = 'center';
 
     const textW = ctx.measureText(p.nickname).width;
-    const padX = isMobile ? fontWorldPx * 0.38 : 4;
-    const halfLabelW = Math.max(barW * 0.5 + 3, textW * 0.5 + padX + 3);
+    const pillPadX = isMobile ? fontWorldPx * 0.42 : 6;
+    const halfLabelW = Math.max(barW * 0.5 + 3, textW * 0.5 + pillPadX + 3);
 
     // Keep overhead label safely inside world borders and (when tank is visible on screen) inside left/right screen borders
     let labelCenterX = Engine.clamp(p.x, halfLabelW + 6, Engine.WORLD_WIDTH - halfLabelW - 6);
@@ -2113,32 +2180,26 @@
     const bx = labelCenterX - barW * 0.5;
     const by = p.y - (isMobile ? 38 * tankBoost + barH : 44);
 
+    // Keep overhead tank HP bar intact right above the tank!
     ctx.fillStyle = 'rgba(7, 13, 25, 0.86)';
     ctx.fillRect(bx - 1.5, by - 1.5, barW + 3, barH + 3);
     const hpRatio = Engine.clamp(p.hp / p.maxHp, 0, 1);
     ctx.fillStyle = hpRatio > 0.55 ? '#22c55e' : hpRatio > 0.28 ? '#f59e0b' : '#ef4444';
     ctx.fillRect(bx, by, barW * hpRatio, barH);
 
-    if (isMobile) {
-      const pillH = fontWorldPx * 1.3;
-      const pillY = by - pillH - 3.5;
-      ctx.fillStyle = 'rgba(7, 13, 25, 0.78)';
-      ctx.beginPath();
-      ctx.roundRect(labelCenterX - textW * 0.5 - padX, pillY, textW + padX * 2, pillH, pillH * 0.45);
-      ctx.fill();
+    // High-contrast bright nickname pill with player team border so nicknames never look dark or hard to read
+    const pillH = isMobile ? fontWorldPx * 1.34 : 18;
+    const pillY = by - pillH - (isMobile ? 4 : 3.5);
+    ctx.fillStyle = 'rgba(15, 34, 66, 0.9)';
+    ctx.strokeStyle = isActiveTurn ? '#fbbf24' : p.color;
+    ctx.lineWidth = isMobile ? Math.max(1.8, fontWorldPx * 0.09) : 1.4;
+    ctx.beginPath();
+    ctx.roundRect(labelCenterX - textW * 0.5 - pillPadX, pillY, textW + pillPadX * 2, pillH, pillH * 0.48);
+    ctx.fill();
+    ctx.stroke();
 
-      ctx.lineWidth = Math.max(2.6, fontWorldPx * 0.16);
-      ctx.strokeStyle = 'rgba(0,0,0,0.92)';
-      ctx.strokeText(p.nickname, labelCenterX, pillY + pillH * 0.78);
-      ctx.fillStyle = isActiveTurn ? '#fde047' : '#ffffff';
-      ctx.fillText(p.nickname, labelCenterX, pillY + pillH * 0.78);
-    } else {
-      ctx.lineWidth = 3;
-      ctx.strokeStyle = 'rgba(0,0,0,0.85)';
-      ctx.strokeText(p.nickname, labelCenterX, by - 5);
-      ctx.fillStyle = isActiveTurn ? '#fde047' : '#f8fafc';
-      ctx.fillText(p.nickname, labelCenterX, by - 5);
-    }
+    ctx.fillStyle = isActiveTurn ? '#fef08a' : '#ffffff';
+    ctx.fillText(p.nickname, labelCenterX, pillY + pillH * 0.76);
   }
 
   function drawOffscreenEnemyPointers(ctx, match, activePlayer, scale, extraMarginPx) {
@@ -2175,15 +2236,15 @@
     }
     const tw = Math.min(maxBadgeW, ctx.measureText(displayLabel).width + 14);
     const rx = align === 'left' ? x : x - tw;
-    ctx.fillStyle = 'rgba(15, 23, 42, 0.86)';
+    ctx.fillStyle = 'rgba(20, 38, 70, 0.92)';
     ctx.strokeStyle = borderColor;
-    ctx.lineWidth = 1.5;
+    ctx.lineWidth = 1.6;
     ctx.beginPath();
     ctx.roundRect(rx, y - 10.5, tw, 21, 10.5);
     ctx.fill();
     ctx.stroke();
 
-    ctx.fillStyle = '#f8fafc';
+    ctx.fillStyle = '#ffffff';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
     ctx.fillText(displayLabel, rx + 7, y);
