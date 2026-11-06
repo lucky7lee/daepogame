@@ -371,9 +371,9 @@
 
   function getMobileTankBoost() {
     if (!isSmartphoneScreen()) return 1.0; // PC keeps exact original 1.0 ratio
-    const ws = Math.max(0.22, getWorldScale());
-    // Scale up tanks relative to map on smartphones (approx 1.95x in portrait, up to 2.85x in short landscape)
-    return Engine.clamp(0.96 / ws, 1.95, 2.85);
+    const ws = Math.max(0.24, getWorldScale());
+    // Balanced smartphone boost (~1.48x in portrait, up to ~1.82x in compact landscape) so tanks look crisp without distortion
+    return Engine.clamp(0.74 / ws, 1.48, 1.82);
   }
 
   function getVisibleWorldWidth() {
@@ -1607,18 +1607,22 @@
     ctx.fill();
     ctx.globalAlpha = 1;
 
-    // 11. Floating Damage / Heal Popups
+    // 11. Floating Damage / Heal Popups (clamped horizontally inside screen bounds so text never clips)
     ctx.textAlign = 'center';
-    const popupFontPx = isSmartphoneScreen() ? Math.round(Engine.clamp(17 / Math.max(0.24, scale), 26, 54)) : 22;
+    const popupFontPx = isSmartphoneScreen() ? Math.round(Engine.clamp(14 / Math.max(0.24, scale), 20, 36)) : 22;
     ctx.font = `900 ${popupFontPx}px Pretendard, Malgun Gothic, sans-serif`;
     for (const ft of app.floatingTexts) {
       const alpha = Math.max(0, 1 - ft.age / ft.dur);
       ctx.globalAlpha = alpha;
-      ctx.lineWidth = isSmartphoneScreen() ? 5.5 : 4;
+      const halfTxtW = ctx.measureText(ft.text).width * 0.5 + 8;
+      const minPopupX = Math.max(halfTxtW, app.camera.x + halfTxtW);
+      const maxPopupX = Math.min(Engine.WORLD_WIDTH - halfTxtW, app.camera.x + visWorldW - halfTxtW);
+      const drawPopupX = maxPopupX >= minPopupX ? Engine.clamp(ft.x, minPopupX, maxPopupX) : ft.x;
+      ctx.lineWidth = isSmartphoneScreen() ? 4.5 : 4;
       ctx.strokeStyle = 'rgba(0,0,0,0.88)';
-      ctx.strokeText(ft.text, ft.x, ft.y);
+      ctx.strokeText(ft.text, drawPopupX, ft.y);
       ctx.fillStyle = ft.color;
-      ctx.fillText(ft.text, ft.x, ft.y);
+      ctx.fillText(ft.text, drawPopupX, ft.y);
     }
     ctx.globalAlpha = 1;
 
@@ -1972,10 +1976,10 @@
       if (!icoSpan) return;
 
       const cvs = document.createElement('canvas');
-      cvs.width = 128;
-      cvs.height = 76;
-      cvs.style.width = '64px';
-      cvs.style.height = '38px';
+      cvs.width = 148;
+      cvs.height = 88;
+      cvs.style.width = '74px';
+      cvs.style.height = '44px';
       cvs.style.display = 'block';
 
       const c = cvs.getContext('2d');
@@ -1990,15 +1994,15 @@
       const pivY = getTankLocalPivotY(tType);
 
       c.save();
-      c.translate(28, 34 - pivY * 0.85);
+      c.translate(33, 39 - pivY * 0.82);
       c.rotate((-28 * Math.PI) / 180);
-      c.scale(0.85, 0.85);
+      c.scale(0.82, 0.82);
       drawTankBarrelByType(c, tType, pal.main, pal.light, 0);
       c.restore();
 
       c.save();
-      c.translate(28, 34);
-      c.scale(0.85, 0.85);
+      c.translate(33, 39);
+      c.scale(0.82, 0.82);
       drawTankBodyByType(c, tType, pal.main, pal.dark, pal.light, 0);
       c.restore();
 
@@ -2010,8 +2014,9 @@
   function drawTank(ctx, p, terrain, isActiveTurn, nowMs) {
     const slope = Engine.clamp(Engine.getTerrainSlopeAngle(terrain, p.x), -0.55, 0.55);
     const isMobile = isSmartphoneScreen();
-    const worldScale = Math.max(0.22, getWorldScale());
-    const tankBoost = getMobileTankBoost(); // 1.0 on PC, ~1.95x-2.85x on Smartphone!
+    const worldScale = Math.max(0.24, getWorldScale());
+    const visWorldW = viewCssW / worldScale;
+    const tankBoost = getMobileTankBoost(); // 1.0 on PC, ~1.48x-1.82x on Smartphone!
     const localPivotY = getTankLocalPivotY(p.tankType);
     const turretOffsetY = localPivotY * tankBoost;
 
@@ -2020,11 +2025,11 @@
       ctx.save();
       const pivotX = p.x;
       const pivotY = p.y - turretOffsetY;
-      const arcR = 58 * (isMobile ? tankBoost * 0.82 : 1);
+      const arcR = 56 * (isMobile ? tankBoost * 0.82 : 1);
 
       // Subtle angle fan
       ctx.strokeStyle = 'rgba(251, 191, 36, 0.32)';
-      ctx.lineWidth = isMobile ? 3 : 2;
+      ctx.lineWidth = isMobile ? 2.6 : 2;
       ctx.setLineDash([5, 5]);
       ctx.beginPath();
       if (p.facing > 0) {
@@ -2041,7 +2046,7 @@
       const startR = 28 * tankBoost;
       const endR = (46 + p.power * 0.55) * (isMobile ? tankBoost * 0.85 : 1);
       ctx.strokeStyle = 'rgba(254, 240, 138, 0.85)';
-      ctx.lineWidth = isMobile ? 3.6 : 2.5;
+      ctx.lineWidth = isMobile ? 3.2 : 2.5;
       ctx.beginPath();
       ctx.moveTo(pivotX + dx * startR, pivotY + dy * startR);
       ctx.lineTo(pivotX + dx * endR, pivotY + dy * endR);
@@ -2049,9 +2054,9 @@
       ctx.setLineDash([]);
 
       // Bouncing Turn Arrow above active tank
-      const bounce = Math.sin(nowMs * 0.007) * (5 * (isMobile ? 1.4 : 1));
-      const arrowBaseY = p.y - (isMobile ? 48 * tankBoost + 34 : 64) + bounce;
-      const arrowSize = isMobile ? 13 : 8;
+      const bounce = Math.sin(nowMs * 0.007) * (5 * (isMobile ? 1.2 : 1));
+      const arrowBaseY = p.y - (isMobile ? 46 * tankBoost + 28 : 64) + bounce;
+      const arrowSize = isMobile ? 11 : 8;
       ctx.fillStyle = '#fbbf24';
       ctx.beginPath();
       ctx.moveTo(p.x, arrowBaseY);
@@ -2083,11 +2088,30 @@
     drawTankBodyByType(ctx, p.tankType, p.color, p.colorDark, p.colorLight, nowMs);
     ctx.restore();
 
-    // 3. Overhead HP Bar & Nickname Tag (Enlarged & crisp on Smartphone ONLY; unchanged on PC!)
-    const barW = isMobile ? Math.round(44 * tankBoost * 0.88) : 46;
-    const barH = isMobile ? Math.round(6 * tankBoost * 0.78) : 6;
-    const bx = p.x - barW * 0.5;
-    const by = p.y - (isMobile ? 39 * tankBoost + barH : 44);
+    // 3. Overhead HP Bar & Nickname Tag (Cleanly sized & horizontally edge-clamped so left/right borders never slice labels!)
+    const barW = isMobile ? Math.round(42 * tankBoost * 0.86) : 46;
+    const barH = isMobile ? Math.round(5.5 * tankBoost * 0.82) : 6;
+    const fontWorldPx = isMobile ? Math.round(Engine.clamp(12 / worldScale, 18, 30)) : 13;
+    ctx.font = `800 ${fontWorldPx}px Pretendard, Malgun Gothic, sans-serif`;
+    ctx.textAlign = 'center';
+
+    const textW = ctx.measureText(p.nickname).width;
+    const padX = isMobile ? fontWorldPx * 0.38 : 4;
+    const halfLabelW = Math.max(barW * 0.5 + 3, textW * 0.5 + padX + 3);
+
+    // Keep overhead label safely inside world borders and (when tank is visible on screen) inside left/right screen borders
+    let labelCenterX = Engine.clamp(p.x, halfLabelW + 6, Engine.WORLD_WIDTH - halfLabelW - 6);
+    const isTankOnScreen = p.x >= app.camera.x - 24 && p.x <= app.camera.x + visWorldW + 24;
+    if (isTankOnScreen && visWorldW > halfLabelW * 2 + 16) {
+      labelCenterX = Engine.clamp(
+        labelCenterX,
+        app.camera.x + halfLabelW + 8,
+        app.camera.x + visWorldW - halfLabelW - 8
+      );
+    }
+
+    const bx = labelCenterX - barW * 0.5;
+    const by = p.y - (isMobile ? 38 * tankBoost + barH : 44);
 
     ctx.fillStyle = 'rgba(7, 13, 25, 0.86)';
     ctx.fillRect(bx - 1.5, by - 1.5, barW + 3, barH + 3);
@@ -2095,38 +2119,31 @@
     ctx.fillStyle = hpRatio > 0.55 ? '#22c55e' : hpRatio > 0.28 ? '#f59e0b' : '#ef4444';
     ctx.fillRect(bx, by, barW * hpRatio, barH);
 
-    // On PC: exact original 13px world font. On Smartphone: scaled so CSS size is ~14.5px bold!
-    const fontWorldPx = isMobile ? Math.round(Engine.clamp(14.5 / worldScale, 25, 52)) : 13;
-    ctx.font = `800 ${fontWorldPx}px Pretendard, Malgun Gothic, sans-serif`;
-    ctx.textAlign = 'center';
-
     if (isMobile) {
-      // Crisp dark rounded pill behind nickname on small smartphone screens for instant readability
-      const textW = ctx.measureText(p.nickname).width;
-      const padX = fontWorldPx * 0.42;
-      const pillH = fontWorldPx * 1.28;
-      const pillY = by - pillH - 4;
-      ctx.fillStyle = 'rgba(7, 13, 25, 0.76)';
+      const pillH = fontWorldPx * 1.3;
+      const pillY = by - pillH - 3.5;
+      ctx.fillStyle = 'rgba(7, 13, 25, 0.78)';
       ctx.beginPath();
-      ctx.roundRect(p.x - textW * 0.5 - padX, pillY, textW + padX * 2, pillH, pillH * 0.45);
+      ctx.roundRect(labelCenterX - textW * 0.5 - padX, pillY, textW + padX * 2, pillH, pillH * 0.45);
       ctx.fill();
 
-      ctx.lineWidth = Math.max(3, fontWorldPx * 0.18);
+      ctx.lineWidth = Math.max(2.6, fontWorldPx * 0.16);
       ctx.strokeStyle = 'rgba(0,0,0,0.92)';
-      ctx.strokeText(p.nickname, p.x, pillY + pillH * 0.78);
+      ctx.strokeText(p.nickname, labelCenterX, pillY + pillH * 0.78);
       ctx.fillStyle = isActiveTurn ? '#fde047' : '#ffffff';
-      ctx.fillText(p.nickname, p.x, pillY + pillH * 0.78);
+      ctx.fillText(p.nickname, labelCenterX, pillY + pillH * 0.78);
     } else {
       ctx.lineWidth = 3;
       ctx.strokeStyle = 'rgba(0,0,0,0.85)';
-      ctx.strokeText(p.nickname, p.x, by - 5);
+      ctx.strokeText(p.nickname, labelCenterX, by - 5);
       ctx.fillStyle = isActiveTurn ? '#fde047' : '#f8fafc';
-      ctx.fillText(p.nickname, p.x, by - 5);
+      ctx.fillText(p.nickname, labelCenterX, by - 5);
     }
   }
 
   function drawOffscreenEnemyPointers(ctx, match, activePlayer, scale, extraMarginPx) {
     if (!activePlayer) return;
+    const isMobile = isSmartphoneScreen();
     let leftIdx = 0;
     let rightIdx = 0;
 
@@ -2134,43 +2151,59 @@
       if (!p.alive || p.id === activePlayer.id) continue;
       const screenX = extraMarginPx + (p.x - app.camera.x) * scale;
       const distMeters = Math.round(Math.abs(p.x - activePlayer.x));
+      const shortNick = isMobile && p.nickname.length > 6 ? `${p.nickname.slice(0, 6)}…` : p.nickname;
 
       if (screenX < -12) {
-        const py = 28 + leftIdx * 28;
+        const py = 26 + leftIdx * 26;
         leftIdx++;
-        drawEdgeBadge(ctx, 8, py, `◀ ${p.badge} ${p.nickname} (${distMeters}m)`, p.color, 'left');
+        drawEdgeBadge(ctx, 8, py, `◀ ${p.badge} ${shortNick} ${distMeters}m`, p.color, 'left');
       } else if (screenX > viewCssW + 12) {
-        const py = 28 + rightIdx * 28;
+        const py = 26 + rightIdx * 26;
         rightIdx++;
-        drawEdgeBadge(ctx, viewCssW - 8, py, `${p.badge} ${p.nickname} (${distMeters}m) ▶`, p.color, 'right');
+        drawEdgeBadge(ctx, viewCssW - 8, py, `${p.badge} ${shortNick} ${distMeters}m ▶`, p.color, 'right');
       }
     }
   }
 
   function drawEdgeBadge(ctx, x, y, label, borderColor, align) {
     ctx.save();
-    ctx.font = '800 11px Pretendard, Malgun Gothic, sans-serif';
-    const tw = ctx.measureText(label).width + 16;
+    ctx.font = '800 10.5px Pretendard, Malgun Gothic, sans-serif';
+    const maxBadgeW = Math.max(96, Math.floor(viewCssW * 0.45));
+    let displayLabel = label;
+    while (displayLabel.length > 5 && ctx.measureText(displayLabel).width + 14 > maxBadgeW) {
+      displayLabel = displayLabel.slice(0, -2) + '…';
+    }
+    const tw = Math.min(maxBadgeW, ctx.measureText(displayLabel).width + 14);
     const rx = align === 'left' ? x : x - tw;
     ctx.fillStyle = 'rgba(15, 23, 42, 0.86)';
     ctx.strokeStyle = borderColor;
     ctx.lineWidth = 1.5;
     ctx.beginPath();
-    ctx.roundRect(rx, y - 11, tw, 22, 11);
+    ctx.roundRect(rx, y - 10.5, tw, 21, 10.5);
     ctx.fill();
     ctx.stroke();
 
     ctx.fillStyle = '#f8fafc';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
-    ctx.fillText(label, rx + 8, y);
+    ctx.fillText(displayLabel, rx + 7, y);
     ctx.restore();
   }
 
-  // Minimap Radar Renderer
+  // Minimap Radar Renderer (Auto-syncs bitmap resolution to actual CSS flex width/height so aspect ratio never stretches!)
   function renderMinimap() {
     const match = app.renderMatch;
     if (!match) return;
+    const cssW = minimapCanvas.clientWidth;
+    const cssH = minimapCanvas.clientHeight;
+    if (cssW > 10 && cssH > 10) {
+      const targetW = Math.round(cssW * viewDpr);
+      const targetH = Math.round(cssH * viewDpr);
+      if (minimapCanvas.width !== targetW || minimapCanvas.height !== targetH) {
+        minimapCanvas.width = targetW;
+        minimapCanvas.height = targetH;
+      }
+    }
     const w = minimapCanvas.width;
     const h = minimapCanvas.height;
     if (w < 10 || h < 10) return;
@@ -3009,6 +3042,7 @@
       terrace: '🏜️ 단차고원'
     };
 
+    const compactUi = isSmartphoneScreen();
     rooms.forEach((r) => {
       const isBusy = r.status !== 'waiting' || r.playerCount >= r.maxPlayers;
       const row = document.createElement('div');
@@ -3016,9 +3050,15 @@
 
       const statusLabel =
         r.status === 'playing'
-          ? `전투중 (${r.playerCount}인)`
+          ? compactUi
+            ? `전투 ${r.playerCount}인`
+            : `전투중 (${r.playerCount}인)`
           : r.playerCount >= 2
-          ? `입장가능 ${r.playerCount}/${r.maxPlayers} (${r.playerCount}인용 가능)`
+          ? compactUi
+            ? `${r.playerCount}/${r.maxPlayers} 입장`
+            : `입장가능 ${r.playerCount}/${r.maxPlayers} (${r.playerCount}인용 가능)`
+          : compactUi
+          ? `${r.playerCount}/${r.maxPlayers} 대기`
           : `대기중 ${r.playerCount}/${r.maxPlayers}`;
 
       row.innerHTML = `
@@ -3068,8 +3108,15 @@
 
     if (titleEl) titleEl.textContent = room.title;
     if (modePill) {
+      const compactUi = isSmartphoneScreen();
       modePill.textContent =
-        count >= 2 ? `현재 ${count}명 → ${count}인용 게임` : `유저 대기중 (${count}/4명)`;
+        count >= 2
+          ? compactUi
+            ? `${count}인용 (${count}/4)`
+            : `현재 ${count}명 → ${count}인용 게임`
+          : compactUi
+          ? `대기 (${count}/4)`
+          : `유저 대기중 (${count}/4명)`;
     }
 
     // Render 4 Player Slots
