@@ -1,11 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.TankClash" parent="Theme.AppCompat.NoActionBar">
+    <style name="Theme.TankClash" parent="@android:style/Theme.DeviceDefault.NoActionBar">
         <item name="android:windowBackground">@color/bg_dark</item>
         <item name="android:statusBarColor">@color/bg_dark</item>
         <item name="android:navigationBarColor">@color/bg_dark</item>
         <item name="android:windowNoTitle">true</item>
-        <item name="windowNoTitle">true</item>
-        <item name="windowActionBar">false</item>
     </style>
 </resources>

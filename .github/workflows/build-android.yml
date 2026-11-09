@@ -34,12 +34,18 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: 4. Sync Latest Web Game Assets into Android Project
+      - name: 4. Accept Android SDK Licenses
+        run: |
+          if [ -n "$ANDROID_HOME" ] && [ -x "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" ]; then
+            yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null 2>&1 || true
+          fi
+
+      - name: 5. Sync Latest Web Game Assets into Android Project
         run: |
           mkdir -p android/app/src/main/assets
           cp index.html style.css engine.js game.js manifest.json sw.js icon-192.png icon-512.png icon.svg favicon.ico android/app/src/main/assets/
 
-      - name: 5. Prepare Persistent Release Signing Keystore
+      - name: 6. Prepare Persistent Release Signing Keystore
         env:
           RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
         run: |
@@ -62,7 +68,7 @@ jobs:
               -dname "CN=Tank Clash, OU=Game, O=Lucky7Lee, L=Seoul, S=Seoul, C=KR"
           fi
 
-      - name: 6. Build Signed Release APK & Google Play AAB
+      - name: 7. Build Signed Release APK & Google Play AAB
         working-directory: android
         run: |
           gradle assembleRelease bundleRelease \
@@ -70,7 +76,7 @@ jobs:
             -PversionName=1.0.${{ github.run_number }} \
             --no-daemon --stacktrace
 
-      - name: 7. Collect Output Files
+      - name: 8. Collect Output Files
         run: |
           mkdir -p dist_output
           cp android/app/build/outputs/apk/release/app-release.apk dist_output/TankClash-release.apk
@@ -79,7 +85,7 @@ jobs:
           cp playstore-feature-graphic.png dist_output/playstore-feature-graphic.png
           cp android/app/release-key.jks dist_output/release-key.jks
 
-      - name: 8. Upload Build Artifacts (APK + AAB + Play Store Graphics)
+      - name: 9. Upload Build Artifacts (APK + AAB + Play Store Graphics)
         uses: actions/upload-artifact@v4
         with:
           name: TankClash-Android-v1.0.${{ github.run_number }}
@@ -91,7 +97,7 @@ jobs:
             dist_output/release-key.jks
           if-no-files-found: error
 
-      - name: 9. Publish / Update GitHub Release for Direct Smartphone Download
+      - name: 10. Publish / Update GitHub Release for Direct Smartphone Download
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest-apk
