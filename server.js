@@ -1,5 +1,5 @@
 // ==========================================
-// DAEPO FORTRESS - Single & 2~4P Online Multi Server (server.js)
+// TANK CLASH (탱크 클래시) - Single & 2~4P Online Multi Server (server.js)
 // Zero external npm dependencies: run with `node server.js`
 // ==========================================
 
@@ -33,7 +33,7 @@ function getShortcutScript(action, targetUrl, iconPath) {
   if (action === 'check') {
     return `
       $desktop = [Environment]::GetFolderPath('Desktop')
-      $names = @('DAEPO.lnk', 'DAEPO.url', '대포대전.lnk', '대포대전.url')
+      $names = @('Tank Clash.lnk', 'Tank Clash.url', '탱크 클래시.lnk', '탱크 클래시.url', 'DAEPO.lnk', 'DAEPO.url', '대포대전.lnk', '대포대전.url')
       $exists = $false
       foreach ($n in $names) {
         if (Test-Path (Join-Path $desktop $n)) { $exists = $true; break }
@@ -45,7 +45,7 @@ function getShortcutScript(action, targetUrl, iconPath) {
   const safeIcon = String(iconPath || path.join(__dirname, 'favicon.ico')).replace(/'/g, '');
   return `
     $desktop = [Environment]::GetFolderPath('Desktop')
-    $lnkPath = Join-Path $desktop '대포대전.lnk'
+    $lnkPath = Join-Path $desktop '탱크 클래시.lnk'
     $wsh = New-Object -ComObject WScript.Shell
     $sc = $wsh.CreateShortcut($lnkPath)
     $edgePaths = @(
@@ -69,7 +69,7 @@ function getShortcutScript(action, targetUrl, iconPath) {
     }
     $sc.WorkingDirectory = "${__dirname.replace(/\\/g, '\\\\')}"
     $sc.IconLocation = "${safeIcon},0"
-    $sc.Description = "포트리스 대포대전 - Single & Multi"
+    $sc.Description = "탱크 클래시 (Tank Clash) - Single & Multi"
     $sc.Save()
     Write-Output 'CREATED'
   `;
@@ -542,7 +542,7 @@ function handleClientMessage(client, msg) {
       }
       if (msg.stats) client.stats = sanitizeStats(msg.stats);
 
-      const roomTitle = String(msg.title || `${client.nickname}의 대포방`).trim().slice(0, 24);
+      const roomTitle = String(msg.title || `${client.nickname}의 탱크 클래시 방`).trim().slice(0, 24);
       const roomId = `room_${nextRoomId++}`;
       const room = {
         id: roomId,
@@ -913,7 +913,7 @@ if (require.main === module) {
   server.listen(PORT, () => {
     const ips = getLocalIpAddresses();
     console.log('====================================================');
-    console.log(`💣 DAEPO FORTRESS SERVER RUNNING!`);
+    console.log(`💣 TANK CLASH (탱크 클래시) SERVER RUNNING!`);
     console.log(`👉 Local PC URL : http://localhost:${PORT}`);
     ips.forEach((ip) => {
       console.log(`👉 LAN / Mobile : http://${ip}:${PORT}`);

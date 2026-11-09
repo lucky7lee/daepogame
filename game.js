@@ -1,5 +1,5 @@
 // ==========================================
-// DAEPO FORTRESS - PC & Smartphone Client (game.js)
+// TANK CLASH (탱크 클래시) - PC & Smartphone Client (game.js)
 // Single (1~4P AI Zeroing / Local Pass-and-Play / Practice)
 // & Online Multi (2~4P Dynamic Room Lobby via WS + Serverless Fallback)
 // ==========================================
@@ -925,9 +925,9 @@
     const totalP = playerConfigs.length;
     const themeName = (Engine.MAP_THEMES[app.renderMatch.mapType] || {}).name || '랜덤 전장';
     if (app.renderMatch.isPractice) {
-      showToast(`🎯 영점 사격 연습! (${themeName}) — 바람과 거리를 계산해 표적을 맞히세요`, 3200);
+      showToast(`🎯 탱크 클래시 영점 사격 연습! (${themeName}) — 바람과 거리를 계산해 표적을 맞히세요`, 3200);
     } else {
-      showToast(`💣 ${totalP}인용 대포대전 시작! [지형: ${themeName}]`, 2600);
+      showToast(`💣 ${totalP}인용 탱크 클래시 (Tank Clash) 시작! [지형: ${themeName}]`, 2600);
     }
 
     beginTurnPhase();
@@ -3670,7 +3670,7 @@
     } else if (obj.type === 'create_room') {
       hostedServerlessRoom = {
         id: 'room_' + app.myClientId,
-        title: obj.title || `${app.nickname}의 대포방`,
+        title: obj.title || `${app.nickname}의 탱크 클래시 방`,
         mapType: obj.mapType || 'random',
         status: 'waiting',
         players: [
@@ -3781,7 +3781,7 @@
         focusActiveTank(true);
         syncAllBattleHud();
         showToast(
-          `🌐 ${msg.playerCount}인용 온라인 대포대전 시작!`,
+          `🌐 ${msg.playerCount}인용 온라인 탱크 클래시 (Tank Clash) 시작!`,
           2600
         );
         beginTurnPhase();
@@ -4284,7 +4284,7 @@
           });
           const data = await res.json();
           if (data && data.ok) {
-            guideBox.textContent = '✅ 바탕화면에 [대포대전] 바로가기 아이콘이 생성되었습니다!';
+            guideBox.textContent = '✅ 바탕화면에 [탱크 클래시] 바로가기 아이콘이 생성되었습니다!';
             guideBox.classList.remove('hidden');
             setTimeout(() => modal.classList.add('hidden'), 1400);
             return;
@@ -4468,7 +4468,7 @@
       playUiClick(620);
       ensureNetworkConnected();
       const titleInput = document.getElementById('input-room-title');
-      const title = titleInput.value.trim() || `${app.nickname}의 대포방`;
+      const title = titleInput.value.trim() || `${app.nickname}의 탱크 클래시 방`;
       netSend({
         type: 'create_room',
         title,

@@ -1,6 +1,6 @@
-# 💣 포트리스 대포대전 (DAEPO FORTRESS)
+# 💣 탱크 클래시 (Tank Clash)
 
-PC 및 스마트폰 화면에 최적화된 **1~4인 턴제 대포 게임**입니다.
+PC 및 스마트폰 화면에 최적화된 **1~4인 턴제 대포 게임 (탱크 클래시 / Tank Clash)**입니다.
 
 ## 🌐 온라인 바로 플레이 (GitHub Pages)
 👉 **https://lucky7lee.github.io/daepogame/**

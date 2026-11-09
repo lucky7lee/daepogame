@@ -316,6 +316,20 @@ input {
   -webkit-text-fill-color: transparent;
 }
 
+.hero-en-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 11px;
+  border-radius: 999px;
+  background: rgba(56, 189, 248, 0.14);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  color: #7dd3fc;
+  font-size: 0.76rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 .hero-desc {
   font-size: 0.85rem;
   color: var(--text-sub);
@@ -1098,6 +1112,28 @@ input {
 .bt-btn.focus {
   border-color: rgba(56, 189, 248, 0.55);
   color: #bae6fd;
+}
+
+.bt-game-brand {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  padding: 4px 9px;
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.65);
+  border: 1px solid rgba(56, 189, 248, 0.32);
+  color: #f8fafc;
+  font-size: 0.76rem;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.bt-game-brand small {
+  color: #7dd3fc;
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
 }
 
 .turn-pill {
@@ -2558,6 +2594,16 @@ input {
   .bt-btn {
     padding: 5px 8px;
     font-size: 0.72rem;
+  }
+
+  .bt-game-brand {
+    padding: 4px 6px;
+    font-size: 0.69rem;
+    gap: 3px;
+  }
+
+  .bt-game-brand small {
+    display: none;
   }
 
   .turn-pill {

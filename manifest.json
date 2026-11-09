@@ -1,7 +1,7 @@
 {
-  "name": "포트리스 대포대전 - 싱글 & 멀티",
-  "short_name": "대포대전",
-  "description": "1~4인 턴제 대포 게임 (싱글 AI 영점조절 대전, 로컬 교대 및 2~4인 온라인 멀티플레이)",
+  "name": "탱크 클래시 (Tank Clash) - 싱글 & 멀티",
+  "short_name": "탱크 클래시",
+  "description": "탱크 클래시 (Tank Clash) - 1~4인 턴제 대포 게임 (싱글 AI 영점조절 대전, 로컬 교대 및 2~4인 온라인 멀티플레이)",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

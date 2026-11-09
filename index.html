@@ -7,13 +7,13 @@
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <meta name="apple-mobile-web-app-title" content="대포대전" />
+  <meta name="apple-mobile-web-app-title" content="탱크 클래시" />
   <link rel="manifest" href="manifest.json" />
   <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png" />
   <link rel="Shortcut Icon" href="favicon.ico" />
   <link rel="apple-touch-icon" href="icon-192.png" />
-  <title>포트리스 대포대전 - 1~4인 턴제 대포 게임</title>
-  <link rel="stylesheet" href="style.css?v=8" />
+  <title>탱크 클래시 (Tank Clash) - 1~4인 턴제 대포 게임</title>
+  <link rel="stylesheet" href="style.css?v=9" />
 </head>
 <body>
   <div class="app-shell">
@@ -23,10 +23,10 @@
          ========================================== -->
     <header id="global-header" class="top-header">
       <div class="brand-box">
-        <img src="icon-192.png" onerror="this.onerror=null;this.src='icon.svg';" alt="대포대전" class="brand-icon" />
+        <img src="icon-192.png" onerror="this.onerror=null;this.src='icon.svg';" alt="탱크 클래시" class="brand-icon" />
         <div class="brand-titles">
-          <span class="brand-main">DAEPO FORTRESS</span>
-          <span class="brand-sub">1~4P ARTILLERY BATTLE</span>
+          <span class="brand-main">Tank Clash</span>
+          <span class="brand-sub">탱크 클래시 · 1~4P BATTLE</span>
         </div>
       </div>
 
@@ -49,9 +49,10 @@
       <div class="menu-scroll">
         <div class="hero-banner">
           <div class="hero-icon-wrap">
-            <img src="icon-192.png" onerror="this.onerror=null;this.src='icon.svg';" alt="대포대전" class="hero-logo" />
+            <img src="icon-192.png" onerror="this.onerror=null;this.src='icon.svg';" alt="탱크 클래시" class="hero-logo" />
           </div>
-          <h1 class="hero-title">포트리스 대포대전</h1>
+          <h1 class="hero-title">탱크 클래시</h1>
+          <div class="hero-en-badge">Tank Clash</div>
           <p class="hero-desc">바람과 지형 굴곡을 계산해 포물선 탄도로 상대를 격파하세요!</p>
         </div>
 
@@ -243,7 +244,7 @@
       <div class="nav-subbar">
         <button id="btn-room-leave" class="pill-btn danger" type="button">◀ 방 나가기</button>
         <div class="subbar-center">
-          <span id="room-view-title" class="subbar-title">대포방</span>
+          <span id="room-view-title" class="subbar-title">탱크 클래시 방</span>
           <span id="room-mode-pill" class="mode-count-pill">대기중 (1/4)</span>
         </div>
         <span class="subbar-spacer"></span>
@@ -306,7 +307,7 @@
     <section id="screen-guide" class="screen-view hidden">
       <div class="nav-subbar">
         <button id="btn-guide-back" class="pill-btn" type="button">◀ 홈으로</button>
-        <span class="subbar-title">📖 게임설명 & 스펙 가이드</span>
+        <span class="subbar-title">📖 탱크 클래시 (Tank Clash) 게임설명</span>
         <span class="subbar-spacer"></span>
       </div>
 
@@ -316,7 +317,7 @@
           <div class="guide-sec-hdr">
             <span class="guide-sec-ico">🎯</span>
             <div>
-              <h2 class="guide-sec-title">포트리스 대포대전 게임 소개</h2>
+              <h2 class="guide-sec-title">탱크 클래시 (Tank Clash) 게임 소개</h2>
               <p class="guide-sec-sub">바람과 지형 고저차를 계산해 포물선 탄도로 상대를 격파하는 1~4인 턴제 포격 게임</p>
             </div>
           </div>
@@ -635,6 +636,7 @@
       <div class="battle-topbar">
         <div class="bt-left">
           <button id="btn-battle-exit" class="bt-btn exit" type="button">◀ 나가기</button>
+          <span class="bt-game-brand" title="탱크 클래시 (Tank Clash)">탱크 클래시 <small>Tank Clash</small></span>
           <div id="turn-indicator" class="turn-pill">
             <span id="turn-badge-dot">🔵</span>
             <span id="turn-player-name">내 턴</span>
@@ -780,10 +782,10 @@
        ========================================== -->
   <div id="install-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true">
     <div class="modal-card install-modal-card">
-      <img src="icon-192.png" onerror="this.onerror=null;this.src='icon.svg';" alt="대포대전" class="install-preview-icon" />
+      <img src="icon-192.png" onerror="this.onerror=null;this.src='icon.svg';" alt="탱크 클래시" class="install-preview-icon" />
       <div class="result-badge win">SHORTCUT</div>
       <h2 class="modal-title">바탕화면 아이콘 추가</h2>
-      <p id="install-desc" class="modal-sub">PC 바탕화면 또는 스마트폰 홈 화면에 대포대전 바로가기 아이콘을 추가할까요?</p>
+      <p id="install-desc" class="modal-sub">PC 바탕화면 또는 스마트폰 홈 화면에 탱크 클래시 (Tank Clash) 바로가기 아이콘을 추가할까요?</p>
       <div id="install-guide-box" class="install-guide hidden"></div>
       <div class="modal-actions">
         <button id="btn-install-confirm" class="modal-btn primary" type="button">✨ 설치하기</button>
@@ -792,7 +794,7 @@
     </div>
   </div>
 
-  <script src="engine.js?v=8"></script>
-  <script src="game.js?v=8"></script>
+  <script src="engine.js?v=9"></script>
+  <script src="game.js?v=9"></script>
 </body>
 </html>

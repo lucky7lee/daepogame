@@ -1,11 +1,11 @@
-// Service Worker for DAEPO FORTRESS PWA Installation
-const CACHE_NAME = 'daepo-fortress-v8';
+// Service Worker for TANK CLASH (탱크 클래시) PWA Installation
+const CACHE_NAME = 'tank-clash-v9';
 const ASSETS = [
   './',
   './index.html',
-  './style.css?v=8',
-  './engine.js?v=8',
-  './game.js?v=8',
+  './style.css?v=9',
+  './engine.js?v=9',
+  './game.js?v=9',
   './manifest.json',
   './icon-192.png',
   './icon-512.png',
