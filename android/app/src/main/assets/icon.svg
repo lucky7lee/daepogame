@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#0f172a"/>
+      <stop offset="60%" stop-color="#1e293b"/>
+      <stop offset="100%" stop-color="#0b1220"/>
+    </linearGradient>
+    <linearGradient id="tankBody" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#38bdf8"/>
+      <stop offset="100%" stop-color="#0284c7"/>
+    </linearGradient>
+    <linearGradient id="hill" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#22c55e"/>
+      <stop offset="30%" stop-color="#16a34a"/>
+      <stop offset="100%" stop-color="#14532d"/>
+    </linearGradient>
+    <radialGradient id="blast" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#fef08a"/>
+      <stop offset="50%" stop-color="#f97316"/>
+      <stop offset="100%" stop-color="#ef4444" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <!-- Parabolic trajectory arc -->
+  <path d="M 235 245 Q 340 85 425 180" fill="none" stroke="#fbbf24" stroke-width="10" stroke-dasharray="14 12" stroke-linecap="round"/>
+  <!-- Explosion burst -->
+  <circle cx="425" cy="180" r="56" fill="url(#blast)"/>
+  <circle cx="425" cy="180" r="22" fill="#fef08a"/>
+  <!-- Terrain hill -->
+  <path d="M 0 380 Q 150 310 290 365 T 512 350 L 512 512 L 0 512 Z" fill="url(#hill)"/>
+  <!-- Cannon barrel -->
+  <g transform="translate(185, 278) rotate(-35)">
+    <rect x="0" y="-16" width="118" height="32" rx="12" fill="#94a3b8" stroke="#0f172a" stroke-width="6"/>
+    <rect x="98" y="-20" width="24" height="40" rx="6" fill="#cbd5e1" stroke="#0f172a" stroke-width="5"/>
+  </g>
+  <!-- Tank turret -->
+  <path d="M 125 292 C 125 244 235 244 235 292 Z" fill="url(#tankBody)" stroke="#0f172a" stroke-width="7"/>
+  <!-- Tank hull -->
+  <rect x="96" y="288" width="168" height="48" rx="22" fill="url(#tankBody)" stroke="#0f172a" stroke-width="7"/>
+  <!-- Tank treads -->
+  <rect x="104" y="328" width="152" height="36" rx="18" fill="#1e293b" stroke="#0f172a" stroke-width="6"/>
+  <circle cx="132" cy="346" r="10" fill="#64748b"/>
+  <circle cx="164" cy="346" r="10" fill="#64748b"/>
+  <circle cx="196" cy="346" r="10" fill="#64748b"/>
+  <circle cx="228" cy="346" r="10" fill="#64748b"/>
+</svg>

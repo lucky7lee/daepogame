@@ -3143,7 +3143,18 @@
   let hostedServerlessRoom = null;
   let joinedHostPeerId = null;
 
+  function isNativeAndroidApp() {
+    const h = (location.hostname || '').toLowerCase();
+    return (
+      Boolean(window.TankClashAndroid) ||
+      location.protocol === 'file:' ||
+      location.protocol === 'capacitor:' ||
+      h === 'appassets.androidplatform.net'
+    );
+  }
+
   function isStaticCloudHost() {
+    if (isNativeAndroidApp()) return true;
     const h = (location.hostname || '').toLowerCase();
     return (
       h.endsWith('.github.io') ||
@@ -4229,6 +4240,12 @@
   let deferredInstallPrompt = null;
 
   function initShortcutHelper() {
+    if (isNativeAndroidApp()) {
+      const openBtn = document.getElementById('btn-open-install');
+      if (openBtn) openBtn.classList.add('hidden');
+      return;
+    }
+
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('./sw.js').catch(() => {});
     }
@@ -4590,5 +4607,36 @@
     setupKeyboardControls();
     initShortcutHelper();
     requestAnimationFrame(frameLoop);
+
+    // Native Android hardware Back button / gesture handler
+    window.handleAndroidBack = function () {
+      const installModal = document.getElementById('install-modal');
+      if (installModal && !installModal.classList.contains('hidden')) {
+        installModal.classList.add('hidden');
+        return true;
+      }
+      const gameoverModal = document.getElementById('gameover-modal');
+      if (gameoverModal && !gameoverModal.classList.contains('hidden')) {
+        const exitBtn = document.getElementById('btn-modal-exit');
+        if (exitBtn) exitBtn.click();
+        return true;
+      }
+      if (app.screen === 'game') {
+        const battleExit = document.getElementById('btn-battle-exit');
+        if (battleExit) battleExit.click();
+        return true;
+      }
+      if (app.screen === 'room') {
+        const roomLeave = document.getElementById('btn-room-leave');
+        if (roomLeave) roomLeave.click();
+        return true;
+      }
+      if (app.screen === 'lobby' || app.screen === 'single-setup' || app.screen === 'guide') {
+        playUiClick(420);
+        showScreen('menu');
+        return true;
+      }
+      return false;
+    };
   });
 })();

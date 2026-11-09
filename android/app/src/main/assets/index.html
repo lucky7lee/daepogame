@@ -1,0 +1,800 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#0b1220" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="탱크 클래시" />
+  <link rel="manifest" href="manifest.json" />
+  <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png" />
+  <link rel="Shortcut Icon" href="favicon.ico" />
+  <link rel="apple-touch-icon" href="icon-192.png" />
+  <title>탱크 클래시 (Tank Clash) - 1~4인 턴제 대포 게임</title>
+  <link rel="stylesheet" href="style.css?v=9" />
+</head>
+<body>
+  <div class="app-shell">
+
+    <!-- ==========================================
+         GLOBAL TOP BAR (Shown on Menu / Setup / Lobby / Room)
+         ========================================== -->
+    <header id="global-header" class="top-header">
+      <div class="brand-box">
+        <img src="icon-192.png" onerror="this.onerror=null;this.src='icon.svg';" alt="탱크 클래시" class="brand-icon" />
+        <div class="brand-titles">
+          <span class="brand-main">Tank Clash</span>
+          <span class="brand-sub">탱크 클래시 · 1~4P BATTLE</span>
+        </div>
+      </div>
+
+      <div class="header-right">
+        <div class="stat-pill" title="나의 멀티/싱글 통합 전적">
+          <span class="s-win">승 <strong id="hdr-stat-w">0</strong></span>
+          <span class="s-lose">패 <strong id="hdr-stat-l">0</strong></span>
+          <span class="s-rate" id="hdr-stat-r">0%</span>
+        </div>
+        <button id="btn-sound-toggle" class="icon-btn sound-on" type="button" title="사운드 켜기/끄기">🔊</button>
+        <button id="btn-reset-stats" class="icon-btn" type="button" title="전적 초기화">↺</button>
+        <button id="btn-open-install" class="icon-btn hidden" type="button" title="바탕화면 바로가기 설치">📲</button>
+      </div>
+    </header>
+
+    <!-- ==========================================
+         1. HOME MENU SCREEN
+         ========================================== -->
+    <section id="screen-menu" class="screen-view">
+      <div class="menu-scroll">
+        <div class="hero-banner">
+          <div class="hero-icon-wrap">
+            <img src="icon-192.png" onerror="this.onerror=null;this.src='icon.svg';" alt="탱크 클래시" class="hero-logo" />
+          </div>
+          <h1 class="hero-title">탱크 클래시</h1>
+          <div class="hero-en-badge">Tank Clash</div>
+          <p class="hero-desc">바람과 지형 굴곡을 계산해 포물선 탄도로 상대를 격파하세요!</p>
+        </div>
+
+        <div class="id-card">
+          <label class="id-pill" id="name-input-pill" for="input-nickname">
+            <span class="id-tag">👤 닉네임</span>
+            <input id="input-nickname" type="text" maxlength="10" placeholder="닉네임 입력 (예: 명사수)" autocomplete="off" />
+          </label>
+          <p id="id-warning-msg" class="id-warn hidden">⚠️ 게임을 시작하기 전에 닉네임을 입력해 주세요!</p>
+        </div>
+
+        <div class="mode-cards">
+          <button id="btn-go-single" class="mode-card single" type="button">
+            <div class="mode-emoji">🤖</div>
+            <div class="mode-info">
+              <div class="mode-title">싱글 게임 (1~4인)</div>
+              <div class="mode-detail">AI 1~3명 추가 대전 · 로컬 교대 · 영점 연습</div>
+            </div>
+            <span class="mode-arrow">설정 ▶</span>
+          </button>
+
+          <button id="btn-go-multi" class="mode-card multi" type="button">
+            <div class="mode-emoji">🌐</div>
+            <div class="mode-info">
+              <div class="mode-title">멀티 게임 (2~4인)</div>
+              <div class="mode-detail">대기실 방 생성 · 참여 인원수(2~4명) 맞춤 대전</div>
+            </div>
+            <span class="mode-arrow">입장 ▶</span>
+          </button>
+
+          <button id="btn-go-guide" class="mode-card guide" type="button">
+            <div class="mode-emoji">📖</div>
+            <div class="mode-info">
+              <div class="mode-title">게임설명 (가이드 & 스펙)</div>
+              <div class="mode-detail">게임 상세 내용 · 플레이 방법 · 포탄/탱크 스펙 · HP 차감표</div>
+            </div>
+            <span class="mode-arrow">보기 ▶</span>
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==========================================
+         2. SINGLE GAME SETUP SCREEN (1~4P AI / Local)
+         ========================================== -->
+    <section id="screen-single-setup" class="screen-view hidden">
+      <div class="nav-subbar">
+        <button id="btn-single-back" class="pill-btn" type="button">◀ 홈으로</button>
+        <span class="subbar-title">🤖 싱글 게임 설정</span>
+        <span class="subbar-spacer"></span>
+      </div>
+
+      <div class="setup-scroll">
+        <!-- Sub-mode Toggle: vs AI or Pass-and-Play -->
+        <div class="setup-block">
+          <div class="block-label">플레이 방식</div>
+          <div class="tab-row">
+            <button id="tab-single-ai" class="tab-btn active" type="button">🤖 AI 추가 대전 (나 + AI)</button>
+            <button id="tab-single-local" class="tab-btn" type="button">👥 한 기기 교대 (2~4인)</button>
+          </div>
+
+          <!-- AI Count Selector -->
+          <div id="panel-ai-count" class="count-grid">
+            <button class="count-card active" data-ai-count="1" type="button">
+              <span class="c-badge">2인용</span>
+              <strong>AI 1명 추가</strong>
+              <small>나 vs 영점조절 AI 1기</small>
+            </button>
+            <button class="count-card" data-ai-count="2" type="button">
+              <span class="c-badge">3인용</span>
+              <strong>AI 2명 추가</strong>
+              <small>나 + AI 2기 개인전</small>
+            </button>
+            <button class="count-card" data-ai-count="3" type="button">
+              <span class="c-badge">4인용</span>
+              <strong>AI 3명 추가</strong>
+              <small>나 + AI 3기 대난투</small>
+            </button>
+            <button class="count-card" data-ai-count="0" type="button">
+              <span class="c-badge practice">1인용</span>
+              <strong>영점 사격 연습</strong>
+              <small>AI 없이 표적 맞히기</small>
+            </button>
+          </div>
+
+          <!-- Local Pass & Play Count Selector -->
+          <div id="panel-local-count" class="count-grid three-cols hidden">
+            <button class="count-card active" data-local-count="2" type="button">
+              <span class="c-badge">2인용</span>
+              <strong>로컬 2인 대전</strong>
+              <small>1P vs 2P 순서 교대</small>
+            </button>
+            <button class="count-card" data-local-count="3" type="button">
+              <span class="c-badge">3인용</span>
+              <strong>로컬 3인 대전</strong>
+              <small>1P~3P 순서 교대</small>
+            </button>
+            <button class="count-card" data-local-count="4" type="button">
+              <span class="c-badge">4인용</span>
+              <strong>로컬 4인 대전</strong>
+              <small>1P~4P 순서 교대</small>
+            </button>
+          </div>
+        </div>
+
+        <!-- Tank Selection -->
+        <div class="setup-block">
+          <div class="block-label">내 탱크 선택</div>
+          <div id="single-tank-grid" class="tank-select-grid">
+            <button class="tank-card active" data-tank="cannon" type="button">
+              <span class="t-icon">🛡️</span>
+              <span class="t-name">캐논</span>
+              <span class="t-desc">밸런스 표준형</span>
+            </button>
+            <button class="tank-card" data-tank="duke" type="button">
+              <span class="t-icon">💥</span>
+              <span class="t-name">헤비듀크</span>
+              <span class="t-desc">강력한 화력형</span>
+            </button>
+            <button class="tank-card" data-tank="multi" type="button">
+              <span class="t-icon">🌋</span>
+              <span class="t-name">크레이터</span>
+              <span class="t-desc">지형 파괴 특화</span>
+            </button>
+            <button class="tank-card" data-tank="laser" type="button">
+              <span class="t-icon">⚡</span>
+              <span class="t-name">스피드</span>
+              <span class="t-desc">장거리 기동형</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Map Selection -->
+        <div class="setup-block">
+          <div class="block-label">전장 지형 (매 게임 랜덤 굴곡 생성)</div>
+          <div id="single-map-chips" class="chip-row">
+            <button class="map-chip active" data-map="random" type="button">🎲 랜덤 지형</button>
+            <button class="map-chip" data-map="mountains" type="button">🏔️ 험준한 설산</button>
+            <button class="map-chip" data-map="canyon" type="button">🏜️ 붉은 대계곡</button>
+            <button class="map-chip" data-map="hills" type="button">🌿 초원 구릉지</button>
+            <button class="map-chip" data-map="twinpeaks" type="button">🌋 쌍봉 분지</button>
+            <button class="map-chip" data-map="terrace" type="button">🏜️ 단차 고원</button>
+          </div>
+        </div>
+
+        <button id="btn-start-single" class="primary-cta-btn" type="button">🚀 출격! 게임 시작</button>
+      </div>
+    </section>
+
+    <!-- ==========================================
+         3. MULTIPLAYER LOBBY SCREEN
+         ========================================== -->
+    <section id="screen-lobby" class="screen-view hidden">
+      <div class="nav-subbar">
+        <button id="btn-lobby-back" class="pill-btn" type="button">◀ 홈으로</button>
+        <div class="subbar-center">
+          <span class="subbar-title">🌐 멀티 대기실</span>
+          <span id="ws-status-badge" class="ws-badge connecting">연결중...</span>
+        </div>
+        <button id="btn-refresh-rooms" class="pill-btn" type="button" title="방 목록 새로고침">🔄</button>
+      </div>
+
+      <div class="lobby-body">
+        <div class="create-room-bar">
+          <input id="input-room-title" type="text" maxlength="20" class="room-title-input" placeholder="방 제목 입력 (비워두면 자동 생성)" />
+          <button id="btn-create-room" class="create-room-btn" type="button">＋ 방 만들기</button>
+        </div>
+
+        <div class="lobby-guide-banner">
+          💡 방에 <strong>2명 참여 시 2인용</strong>, <strong>3명 참여 시 3인용</strong>, <strong>4명 참여 시 4인용</strong> 게임으로 진행됩니다!
+        </div>
+
+        <div class="room-list-panel">
+          <div class="room-list-header">
+            <span>대기실 방 목록</span>
+            <span id="room-count-badge" class="cnt-pill">0</span>
+          </div>
+          <div id="room-list-container" class="room-list-items">
+            <div class="empty-room-msg">생성된 방이 없습니다 — 상단의 [＋ 방 만들기]를 눌러보세요!</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==========================================
+         4. MULTIPLAYER WAITING ROOM SCREEN (2~4 Players)
+         ========================================== -->
+    <section id="screen-room" class="screen-view hidden">
+      <div class="nav-subbar">
+        <button id="btn-room-leave" class="pill-btn danger" type="button">◀ 방 나가기</button>
+        <div class="subbar-center">
+          <span id="room-view-title" class="subbar-title">탱크 클래시 방</span>
+          <span id="room-mode-pill" class="mode-count-pill">대기중 (1/4)</span>
+        </div>
+        <span class="subbar-spacer"></span>
+      </div>
+
+      <div class="waiting-room-body">
+        <div id="room-player-slots" class="player-slots-grid">
+          <!-- Dynamically populated 4 slots -->
+        </div>
+
+        <div class="room-config-row">
+          <div class="room-cfg-col">
+            <div class="mini-label">내 탱크 기체 변경</div>
+            <div id="room-tank-selector" class="mini-tank-row">
+              <button class="mini-tank-btn active" data-tank="cannon" type="button">🛡️ 캐논</button>
+              <button class="mini-tank-btn" data-tank="duke" type="button">💥 듀크</button>
+              <button class="mini-tank-btn" data-tank="multi" type="button">🌋 크레이터</button>
+              <button class="mini-tank-btn" data-tank="laser" type="button">⚡ 스피드</button>
+            </div>
+          </div>
+
+          <div class="room-cfg-col">
+            <div class="mini-label">맵 지형 <span id="room-map-lock-hint">(방장 선택)</span></div>
+            <div id="room-map-selector" class="mini-tank-row">
+              <button class="mini-map-btn active" data-map="random" type="button">🎲 랜덤</button>
+              <button class="mini-map-btn" data-map="mountains" type="button">🏔️ 설산</button>
+              <button class="mini-map-btn" data-map="canyon" type="button">🏜️ 계곡</button>
+              <button class="mini-map-btn" data-map="hills" type="button">🌿 구릉</button>
+              <button class="mini-map-btn" data-map="twinpeaks" type="button">🌋 쌍봉</button>
+              <button class="mini-map-btn" data-map="terrace" type="button">🏜️ 고원</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Quick Chat & Notice Log -->
+        <div class="room-chat-box">
+          <div id="room-chat-log" class="room-chat-log"></div>
+          <div class="quick-chat-stamps">
+            <button class="stamp-btn" data-msg="👋 안녕하세요!" type="button">👋 안녕!</button>
+            <button class="stamp-btn" data-msg="🚀 바로 시작해요!" type="button">🚀 시작해요!</button>
+            <button class="stamp-btn" data-msg="⏳ 한 분만 더 기다려요" type="button">⏳ 대기!</button>
+            <button class="stamp-btn" data-msg="🔥 재밌게 해봐요!" type="button">🔥 가즈아!</button>
+          </div>
+        </div>
+
+        <div class="room-footer-action">
+          <button id="btn-host-start-match" class="primary-cta-btn" type="button" disabled>
+            ⏳ 최소 2명 이상 모이면 시작 가능 (현재 1/4명)
+          </button>
+          <div id="guest-wait-banner" class="guest-wait-banner hidden">
+            ⏳ 방장이 게임을 시작하기를 기다리는 중입니다...
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==========================================
+         4-B. GAME GUIDE & SPEC ENCYCLOPEDIA SCREEN
+         ========================================== -->
+    <section id="screen-guide" class="screen-view hidden">
+      <div class="nav-subbar">
+        <button id="btn-guide-back" class="pill-btn" type="button">◀ 홈으로</button>
+        <span class="subbar-title">📖 탱크 클래시 (Tank Clash) 게임설명</span>
+        <span class="subbar-spacer"></span>
+      </div>
+
+      <div class="guide-scroll">
+        <!-- 1. Game Overview -->
+        <div class="guide-card">
+          <div class="guide-sec-hdr">
+            <span class="guide-sec-ico">🎯</span>
+            <div>
+              <h2 class="guide-sec-title">탱크 클래시 (Tank Clash) 게임 소개</h2>
+              <p class="guide-sec-sub">바람과 지형 고저차를 계산해 포물선 탄도로 상대를 격파하는 1~4인 턴제 포격 게임</p>
+            </div>
+          </div>
+          <div class="guide-feature-grid">
+            <div class="guide-feat-item">
+              <strong>📐 실시간 포물선 & 바람 물리</strong>
+              <p>중력과 매 턴 변화하는 바람(좌/우 풍속 0~15)이 포탄 궤적에 실시간으로 작용합니다.</p>
+            </div>
+            <div class="guide-feat-item">
+              <strong>🌋 지형 파괴 & 수장(낙사) 격파</strong>
+              <p>포탄 폭발 시 지형이 깊게 파이며, 탱크가 수면(WATER) 아래로 빠지면 남은 체력과 관계없이 즉시 격파됩니다.</p>
+            </div>
+            <div class="guide-feat-item">
+              <strong>🤖 영점 조절 AI 싱글 모드 (1~4인)</strong>
+              <p>AI 1~3기를 추가해 2~4인용 대전을 즐기거나, 한 기기 교대 플레이(2~4인) 및 1인 사격 연습이 가능합니다.</p>
+            </div>
+            <div class="guide-feat-item">
+              <strong>🌐 실시간 멀티 대기실 (2~4인)</strong>
+              <p>대기실 방에 참여한 인원수(2명→2인용, 3명→3인용, 4명→4인용)에 맞춰 실시간 온라인 대전이 진행됩니다.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- 2. How to Play & Controls -->
+        <div class="guide-card">
+          <div class="guide-sec-hdr">
+            <span class="guide-sec-ico">🕹️</span>
+            <div>
+              <h2 class="guide-sec-title">플레이 방법 & 조작 가이드</h2>
+              <p class="guide-sec-sub">각 플레이어는 자신의 턴(제한시간 35초)마다 아래 순서로 행동합니다</p>
+            </div>
+          </div>
+
+          <div class="guide-steps-list">
+            <div class="guide-step-row">
+              <span class="g-step-num">1</span>
+              <div class="g-step-body">
+                <strong>탱크 이동 & 방향 전환 (◀ / ▶)</strong>
+                <p>턴마다 충전되는 연료(⛽)를 사용해 유리한 고지대나 엄폐 지형으로 이동하고 사격 방향(좌/우)을 잡습니다.</p>
+              </div>
+            </div>
+            <div class="guide-step-row">
+              <span class="g-step-num">2</span>
+              <div class="g-step-body">
+                <strong>포신 각도 조절 (▲ / ▼)</strong>
+                <p>탱크별 허용 각도 범위 내에서 포신 각도를 조절합니다. 고각 사격일수록 바람의 영향을 더 많이 받습니다.</p>
+              </div>
+            </div>
+            <div class="guide-step-row">
+              <span class="g-step-num">3</span>
+              <div class="g-step-body">
+                <strong>무기(포탄) 선택 & 전장 정찰</strong>
+                <p>하단 무기 슬롯에서 사용할 탄을 고릅니다. 화면을 좌우로 드래그하거나 <strong>상단 HP 카드 / 미니맵</strong>을 터치하면 상대 위치와 거리를 즉시 확인할 수 있습니다.</p>
+              </div>
+            </div>
+            <div class="guide-step-row">
+              <span class="g-step-num">4</span>
+              <div class="g-step-body">
+                <strong>파워 조절 & 발사 (🔥 발사!)</strong>
+                <p>파워 게이지(10~100)를 맞춰 발사합니다. 게이지 위의 <strong>주황색 눈금</strong>은 내 직전 턴 발사 파워를 표시해 영점 보정을 도와줍니다.</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="guide-ctrl-compare">
+            <div class="guide-ctrl-box">
+              <div class="g-ctrl-tag">📱 스마트폰 / 마우스 조작</div>
+              <ul>
+                <li><strong>이동 / 각도 / 파워</strong>: 하단 버튼 터치 (길게 누르면 연속 조절) 또는 파워 게이지 드래그</li>
+                <li><strong>화면 좌우 스크롤</strong>: 전장 배경을 손가락/마우스로 좌우 드래그 또는 미니맵 터치</li>
+                <li><strong>상대 위치 확인</strong>: 상단 플레이어 HP 현황판 카드를 터치하면 해당 탱크로 카메라 이동</li>
+              </ul>
+            </div>
+            <div class="guide-ctrl-box">
+              <div class="g-ctrl-tag">⌨️ PC 키보드 단축키</div>
+              <ul>
+                <li><strong>← / → 방향키</strong>: 탱크 좌/우 이동 및 조준 방향 전환</li>
+                <li><strong>↑ / ↓ 방향키</strong>: 대포 포신 각도 올리기 / 내리기</li>
+                <li><strong>Spacebar (길게 누르기)</strong>: 파워 게이지 차징 후 떼면 즉시 발사</li>
+                <li><strong>Enter 키</strong>: 현재 설정된 파워 수치로 즉시 발사</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <!-- 3. Weapons & Shells Specification -->
+        <div class="guide-card">
+          <div class="guide-sec-hdr">
+            <span class="guide-sec-ico">💣</span>
+            <div>
+              <h2 class="guide-sec-title">포탄(무기) 종류별 상세 스펙</h2>
+              <p class="guide-sec-sub">포탄마다 비행 외형·사운드·폭발 반경·지형 파괴력이 다르게 설계되어 있습니다</p>
+            </div>
+          </div>
+
+          <div class="guide-table-wrap">
+            <table class="guide-spec-table">
+              <thead>
+                <tr>
+                  <th>포탄 종류</th>
+                  <th>보유 탄수</th>
+                  <th>발사 수</th>
+                  <th>기본 데미지</th>
+                  <th>폭발 반경</th>
+                  <th>지형 파괴</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="td-name"><span class="w-badge normal">💣 일반탄</span></td>
+                  <td><strong>∞ (무제한)</strong></td>
+                  <td>1발</td>
+                  <td><strong class="txt-dmg">42</strong></td>
+                  <td>68 px</td>
+                  <td>46 px</td>
+                </tr>
+                <tr>
+                  <td class="td-name"><span class="w-badge double">🚀 더블샷</span></td>
+                  <td><strong>2회</strong></td>
+                  <td>연속 2발</td>
+                  <td><strong class="txt-dmg">29 × 2 (58)</strong></td>
+                  <td>58 px</td>
+                  <td>36 px</td>
+                </tr>
+                <tr>
+                  <td class="td-name"><span class="w-badge power">☢️ 고폭탄</span></td>
+                  <td><strong>2회</strong></td>
+                  <td>1발</td>
+                  <td><strong class="txt-dmg-hi">62</strong></td>
+                  <td>96 px</td>
+                  <td>74 px</td>
+                </tr>
+                <tr>
+                  <td class="td-name"><span class="w-badge teleport">🌀 이동탄</span></td>
+                  <td><strong>1회</strong></td>
+                  <td>1발</td>
+                  <td><span class="txt-muted">0 (피해 없음)</span></td>
+                  <td>-</td>
+                  <td>-</td>
+                </tr>
+                <tr>
+                  <td class="td-name"><span class="w-badge heal">🔧 수리키트</span></td>
+                  <td><strong>1회</strong></td>
+                  <td>즉시 발동</td>
+                  <td><strong class="txt-heal">+35 HP 회복</strong></td>
+                  <td>-</td>
+                  <td>-</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="guide-wpn-notes">
+            <div class="g-wpn-note"><strong>💣 일반탄</strong>: 황금빛 화염 궤적을 그리며 날아가는 표준 철갑탄으로 탄수 제한 없이 사용할 수 있습니다.</div>
+            <div class="g-wpn-note"><strong>🚀 더블샷</strong>: 청록색 부스터를 분사하는 소형 로켓탄 2발을 연속 발사합니다. 2발 모두 명중 시 일반탄보다 높은 피해를 입힙니다.</div>
+            <div class="g-wpn-note"><strong>☢️ 고폭탄</strong>: 경기당 <strong>2발</strong> 지급되는 초강력 중량 탄두입니다. 넓은 폭발 반경(96px)과 거대한 크레이터(74px)를 생성합니다.</div>
+            <div class="g-wpn-note"><strong>🌀 이동탄 & 🔧 수리키트</strong>: 이동탄은 탄착 지점으로 내 탱크를 순간이동시키며, 수리키트는 턴을 사용해 체력을 즉시 <strong>+35 회복</strong>합니다.</div>
+          </div>
+        </div>
+
+        <!-- 4. Tank Specifications -->
+        <div class="guide-card">
+          <div class="guide-sec-hdr">
+            <span class="guide-sec-ico">🛡️</span>
+            <div>
+              <h2 class="guide-sec-title">탱크 종류별 상세 스펙</h2>
+              <p class="guide-sec-sub">4종의 탱크는 고유한 외형과 체력·연료·화력 배율·지형 파괴 배율을 가집니다</p>
+            </div>
+          </div>
+
+          <div id="guide-tank-cards" class="guide-tank-grid">
+            <div class="guide-tank-item" data-guide-tank="cannon">
+              <div class="gt-top">
+                <div class="gt-preview" data-tank-preview="cannon">🛡️</div>
+                <div class="gt-titles">
+                  <strong>캐논 (CANNON)</strong>
+                  <span>밸런스 표준형 전차</span>
+                </div>
+              </div>
+              <div class="gt-stats">
+                <span>최대 HP <strong>100</strong></span>
+                <span>이동 연료 <strong>120</strong></span>
+                <span>화력 배율 <strong class="txt-accent">×1.05</strong></span>
+                <span>지형 파괴 <strong>×1.05</strong></span>
+                <span>포신 각도 <strong>8° ~ 84°</strong></span>
+              </div>
+            </div>
+
+            <div class="guide-tank-item" data-guide-tank="duke">
+              <div class="gt-top">
+                <div class="gt-preview" data-tank-preview="duke">💥</div>
+                <div class="gt-titles">
+                  <strong>헤비듀크 (HEAVY DUKE)</strong>
+                  <span>강력한 화력형 중전차</span>
+                </div>
+              </div>
+              <div class="gt-stats">
+                <span>최대 HP <strong class="txt-heal">110</strong></span>
+                <span>이동 연료 <strong>95</strong></span>
+                <span>화력 배율 <strong class="txt-dmg-hi">×1.18</strong></span>
+                <span>지형 파괴 <strong>×0.96</strong></span>
+                <span>포신 각도 <strong>10° ~ 80°</strong></span>
+              </div>
+            </div>
+
+            <div class="guide-tank-item" data-guide-tank="multi">
+              <div class="gt-top">
+                <div class="gt-preview" data-tank-preview="multi">🌋</div>
+                <div class="gt-titles">
+                  <strong>크레이터 (CRATER)</strong>
+                  <span>지형 파괴 특화 자주포</span>
+                </div>
+              </div>
+              <div class="gt-stats">
+                <span>최대 HP <strong>100</strong></span>
+                <span>이동 연료 <strong>110</strong></span>
+                <span>화력 배율 <strong>×0.95</strong></span>
+                <span>지형 파괴 <strong class="txt-dmg">×1.38</strong></span>
+                <span>포신 각도 <strong>6° ~ 86°</strong></span>
+              </div>
+            </div>
+
+            <div class="guide-tank-item" data-guide-tank="laser">
+              <div class="gt-top">
+                <div class="gt-preview" data-tank-preview="laser">⚡</div>
+                <div class="gt-titles">
+                  <strong>스피드 (SPEED)</strong>
+                  <span>장거리 기동형 호버 전차</span>
+                </div>
+              </div>
+              <div class="gt-stats">
+                <span>최대 HP <strong>95</strong></span>
+                <span>이동 연료 <strong class="txt-accent">165</strong></span>
+                <span>화력 배율 <strong>×1.02</strong></span>
+                <span>지형 파괴 <strong>×0.90</strong></span>
+                <span>포신 각도 <strong>5° ~ 85°</strong></span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 5. HP Deduction Matrix Table & Splash Formula -->
+        <div class="guide-card">
+          <div class="guide-sec-hdr">
+            <span class="guide-sec-ico">📊</span>
+            <div>
+              <h2 class="guide-sec-title">포탄 × 탱크별 HP 차감량 표</h2>
+              <p class="guide-sec-sub">발사한 탱크의 화력 배율(dmgMult)이 적용된 직격 시 실제 HP 차감 수치입니다</p>
+            </div>
+          </div>
+
+          <div class="guide-table-wrap">
+            <table class="guide-spec-table hp-matrix-table">
+              <thead>
+                <tr>
+                  <th>발사 탱크 (화력 배율)</th>
+                  <th>💣 일반탄 직격</th>
+                  <th>🚀 더블샷 (1발 / 2발 합산)</th>
+                  <th>☢️ 고폭탄 직격</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="td-name"><strong>🛡️ 캐논</strong> <small>(×1.05)</small></td>
+                  <td><strong class="txt-dmg">-44 HP</strong></td>
+                  <td><strong>-30 HP</strong> / <strong class="txt-dmg">-60 HP</strong></td>
+                  <td><strong class="txt-dmg-hi">-65 HP</strong></td>
+                </tr>
+                <tr>
+                  <td class="td-name"><strong>💥 헤비듀크</strong> <small>(×1.18)</small></td>
+                  <td><strong class="txt-dmg">-50 HP</strong></td>
+                  <td><strong>-34 HP</strong> / <strong class="txt-dmg">-68 HP</strong></td>
+                  <td><strong class="txt-dmg-hi">-73 HP</strong></td>
+                </tr>
+                <tr>
+                  <td class="td-name"><strong>🌋 크레이터</strong> <small>(×0.95)</small></td>
+                  <td><strong class="txt-dmg">-40 HP</strong></td>
+                  <td><strong>-28 HP</strong> / <strong class="txt-dmg">-56 HP</strong></td>
+                  <td><strong class="txt-dmg-hi">-59 HP</strong></td>
+                </tr>
+                <tr>
+                  <td class="td-name"><strong>⚡ 스피드</strong> <small>(×1.02)</small></td>
+                  <td><strong class="txt-dmg">-43 HP</strong></td>
+                  <td><strong>-30 HP</strong> / <strong class="txt-dmg">-60 HP</strong></td>
+                  <td><strong class="txt-dmg-hi">-63 HP</strong></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="guide-formula-box">
+            <div class="gf-row">
+              <span class="gf-badge direct">🎯 직격 판정 (100% 피해)</span>
+              <p>탱크 중심으로부터 약 <strong>14.3 px 이내</strong>에 탄착하면 위 표의 최대 HP 차감량이 100% 적용됩니다.</p>
+            </div>
+            <div class="gf-row">
+              <span class="gf-badge splash">💥 폭발 반경 스플래시 감쇠</span>
+              <p>정통으로 맞지 않더라도 포탄별 <strong>폭발 반경(splashRadius)</strong> 안에 들어오면 거리에 비례해 피해량이 선형 감쇠하며, 폭발 반경 끝자락에 스치면 최대 데미지의 <strong>약 22% (최소 -4 HP 보장)</strong>가 차감됩니다.</p>
+            </div>
+            <div class="gf-row">
+              <span class="gf-badge sink">🌊 수장(낙사) 즉사 판정</span>
+              <p>지형 파괴 크레이터로 인해 바닥이 무너져 탱크가 수면(WATER) 아래로 빠지면 남은 HP와 관계없이 <strong>즉시 격파(-999 HP)</strong>됩니다.</p>
+            </div>
+          </div>
+        </div>
+
+        <button id="btn-guide-bottom-back" class="primary-cta-btn" type="button">◀ 메인 화면으로 돌아가기</button>
+      </div>
+    </section>
+
+    <!-- ==========================================
+         5. BATTLEFIELD GAME SCREEN (PC & Mobile Optimized)
+         ========================================== -->
+    <section id="screen-game" class="screen-view game-screen hidden">
+      <!-- Compact Battle Top Bar -->
+      <div class="battle-topbar">
+        <div class="bt-left">
+          <button id="btn-battle-exit" class="bt-btn exit" type="button">◀ 나가기</button>
+          <span class="bt-game-brand" title="탱크 클래시 (Tank Clash)">탱크 클래시 <small>Tank Clash</small></span>
+          <div id="turn-indicator" class="turn-pill">
+            <span id="turn-badge-dot">🔵</span>
+            <span id="turn-player-name">내 턴</span>
+            <span id="turn-timer" class="turn-timer">35s</span>
+          </div>
+        </div>
+
+        <!-- Wind Gauge -->
+        <div class="wind-box" title="현재 풍향 및 풍속 (탄도에 영향)">
+          <span class="wind-title">WIND</span>
+          <div class="wind-meter">
+            <div class="wind-bar-half left"><div id="wind-fill-left" class="wind-fill"></div></div>
+            <div class="wind-center-pin"></div>
+            <div class="wind-bar-half right"><div id="wind-fill-right" class="wind-fill"></div></div>
+          </div>
+          <span id="wind-value-text" class="wind-val">무풍 0</span>
+        </div>
+
+        <!-- Minimap & Camera Controls -->
+        <div class="bt-right">
+          <canvas id="minimap-canvas" width="140" height="36" title="미니맵 터치/드래그로 화면 좌우 이동"></canvas>
+          <button id="btn-focus-me" class="bt-btn focus" type="button" title="현재 턴 탱크로 카메라 이동">🎯 포커스</button>
+          <button id="btn-battle-sound" class="bt-btn" type="button" title="사운드">🔊</button>
+        </div>
+      </div>
+
+      <!-- Alive Players Status Strip (Tap any player to pan camera to them & inspect distance!) -->
+      <div id="hud-players-strip" class="players-strip"></div>
+
+      <!-- Fixed-Height Horizontally Scrolling Battlefield Stage -->
+      <div id="battle-stage" class="battle-stage">
+        <canvas id="game-canvas"></canvas>
+
+        <!-- Floating Status Toast (AI Zeroing Info / Turn Banner / Camera Scroll Hint) -->
+        <div id="battle-toast" class="battle-toast hidden"></div>
+
+        <!-- Floating Recenter Pill when manually scrolled away -->
+        <button id="btn-floating-recenter" class="floating-recenter hidden" type="button">
+          🎯 내 탱크로 돌아가기
+        </button>
+      </div>
+
+      <!-- Fortress Tactical Bottom Control Deck -->
+      <div id="control-deck" class="control-deck">
+        <!-- Weapon / Special Shell Strip -->
+        <div class="weapon-strip">
+          <button class="wpn-btn active" data-wpn="normal" type="button">
+            <span class="w-ico">💣</span><span class="w-lbl">일반탄</span><em class="w-cnt" id="ammo-normal">∞</em>
+          </button>
+          <button class="wpn-btn" data-wpn="double" type="button">
+            <span class="w-ico">🚀</span><span class="w-lbl">더블샷</span><em class="w-cnt" id="ammo-double">2</em>
+          </button>
+          <button class="wpn-btn" data-wpn="power" type="button">
+            <span class="w-ico">☢️</span><span class="w-lbl">고폭탄</span><em class="w-cnt" id="ammo-power">2</em>
+          </button>
+          <button class="wpn-btn" data-wpn="teleport" type="button">
+            <span class="w-ico">🌀</span><span class="w-lbl">이동탄</span><em class="w-cnt" id="ammo-teleport">1</em>
+          </button>
+          <button class="wpn-btn" data-wpn="heal" type="button">
+            <span class="w-ico">🔧</span><span class="w-lbl">수리+35</span><em class="w-cnt" id="ammo-heal">1</em>
+          </button>
+          <span class="pc-key-hint">PC: 방향키(이동/각도) · Space(파워차징) · 화면드래그(좌우 정찰)</span>
+        </div>
+
+        <!-- Main Controls Row: Move | Angle | Power & Fire -->
+        <div class="controls-main-row">
+          <!-- 1. Tank Move + Fuel -->
+          <div class="ctrl-group move-group">
+            <div class="move-btns">
+              <button id="btn-move-left" class="pad-btn" type="button">◀</button>
+              <div class="move-center-lbl">
+                <span>이동</span>
+                <strong id="lbl-facing">우 ▶</strong>
+              </div>
+              <button id="btn-move-right" class="pad-btn" type="button">▶</button>
+            </div>
+            <div class="fuel-bar-wrap" title="이번 턴 남은 이동 연료">
+              <span class="fuel-tag">⛽</span>
+              <div class="fuel-track"><div id="fuel-bar-fill" class="fuel-fill"></div></div>
+              <span id="lbl-fuel" class="fuel-num">120</span>
+            </div>
+          </div>
+
+          <!-- 2. Cannon Angle -->
+          <div class="ctrl-group angle-group">
+            <button id="btn-angle-down" class="pad-btn sm" type="button">▼</button>
+            <div class="angle-readout">
+              <span class="ang-lbl">각도</span>
+              <strong id="lbl-angle">45°</strong>
+            </div>
+            <button id="btn-angle-up" class="pad-btn sm" type="button">▲</button>
+          </div>
+
+          <!-- 3. Power Bar + Fire Button -->
+          <div class="ctrl-group power-fire-group">
+            <div class="power-box">
+              <div class="power-top-row">
+                <button id="btn-power-minus" class="micro-btn" type="button">－</button>
+                <span class="pwr-label">파워 <strong id="lbl-power">58</strong></span>
+                <button id="btn-power-plus" class="micro-btn" type="button">＋</button>
+              </div>
+              <div id="power-gauge-track" class="power-track" title="터치/드래그하여 파워 조절 (주황색 눈금 = 직전 발사 파워)">
+                <div class="power-ticks">
+                  <span></span><span></span><span></span>
+                </div>
+                <div id="power-gauge-fill" class="power-fill" style="width: 58%;"></div>
+                <div id="power-last-marker" class="power-last-marker hidden" title="이전 턴 발사 파워"></div>
+                <div id="power-thumb" class="power-thumb" style="left: 58%;"></div>
+              </div>
+            </div>
+
+            <button id="btn-fire" class="fire-btn" type="button">
+              <span class="fire-ico">🔥</span>
+              <span class="fire-txt">발사!</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </div>
+
+  <!-- ==========================================
+       MATCH OVER / RANKING MODAL
+       ========================================== -->
+  <div id="gameover-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true">
+    <div class="modal-card">
+      <div id="modal-result-badge" class="result-badge win">VICTORY</div>
+      <h2 id="modal-result-title" class="modal-title">🏆 최종 승리!</h2>
+      <p id="modal-result-sub" class="modal-sub">전장을 완벽히 제압했습니다</p>
+
+      <div id="modal-ranking-list" class="ranking-list"></div>
+
+      <div class="modal-actions">
+        <button id="btn-modal-rematch" class="modal-btn primary" type="button">🔄 새 맵에서 다시하기</button>
+        <button id="btn-modal-exit" class="modal-btn secondary" type="button">🚪 나가기</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==========================================
+       SHORTCUT / PWA INSTALL MODAL
+       ========================================== -->
+  <div id="install-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true">
+    <div class="modal-card install-modal-card">
+      <img src="icon-192.png" onerror="this.onerror=null;this.src='icon.svg';" alt="탱크 클래시" class="install-preview-icon" />
+      <div class="result-badge win">SHORTCUT</div>
+      <h2 class="modal-title">바탕화면 아이콘 추가</h2>
+      <p id="install-desc" class="modal-sub">PC 바탕화면 또는 스마트폰 홈 화면에 탱크 클래시 (Tank Clash) 바로가기 아이콘을 추가할까요?</p>
+      <div id="install-guide-box" class="install-guide hidden"></div>
+      <div class="modal-actions">
+        <button id="btn-install-confirm" class="modal-btn primary" type="button">✨ 설치하기</button>
+        <button id="btn-install-later" class="modal-btn secondary" type="button">나중에</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="engine.js?v=9"></script>
+  <script src="game.js?v=9"></script>
+</body>
+</html>

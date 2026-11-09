@@ -1,0 +1,30 @@
+{
+  "name": "탱크 클래시 (Tank Clash) - 싱글 & 멀티",
+  "short_name": "탱크 클래시",
+  "description": "탱크 클래시 (Tank Clash) - 1~4인 턴제 대포 게임 (싱글 AI 영점조절 대전, 로컬 교대 및 2~4인 온라인 멀티플레이)",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0b1220",
+  "theme_color": "#0b1220",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}

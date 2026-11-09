@@ -1,0 +1,76 @@
+plugins {
+    id 'com.android.application'
+}
+
+def verCode = project.hasProperty('versionCode') ? project.property('versionCode').toInteger() : 1
+def verName = project.hasProperty('versionName') ? project.property('versionName').toString() : "1.0.${verCode}"
+
+android {
+    namespace 'io.github.lucky7lee.tankclash'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId "io.github.lucky7lee.tankclash"
+        minSdk 24
+        targetSdk 35
+        versionCode verCode
+        versionName verName
+    }
+
+    signingConfigs {
+        release {
+            def ksFile = file("release-key.jks")
+            if (ksFile.exists()) {
+                storeFile ksFile
+                storePassword System.getenv("KEYSTORE_PASSWORD") ?: "tankclash2026"
+                keyAlias System.getenv("KEY_ALIAS") ?: "tankclash"
+                keyPassword System.getenv("KEY_PASSWORD") ?: "tankclash2026"
+            }
+        }
+    }
+
+    buildTypes {
+        debug {
+            debuggable true
+        }
+        release {
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            if (file("release-key.jks").exists()) {
+                signingConfig signingConfigs.release
+            } else {
+                signingConfig signingConfigs.debug
+            }
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+tasks.register('syncWebAssets', Copy) {
+    from('../../') {
+        include 'index.html'
+        include 'style.css'
+        include 'engine.js'
+        include 'game.js'
+        include 'manifest.json'
+        include 'sw.js'
+        include 'icon-192.png'
+        include 'icon-512.png'
+        include 'icon.svg'
+        include 'favicon.ico'
+    }
+    into 'src/main/assets'
+}
+
+preBuild.dependsOn(syncWebAssets)
+
+dependencies {
+    implementation 'androidx.appcompat:appcompat:1.7.0'
+    implementation 'androidx.webkit:webkit:1.12.1'
+    implementation 'androidx.activity:activity:1.9.3'
+}
