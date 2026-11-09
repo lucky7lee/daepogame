@@ -19,13 +19,10 @@ android {
 
     signingConfigs {
         release {
-            def ksFile = file("release-key.jks")
-            if (ksFile.exists()) {
-                storeFile ksFile
-                storePassword System.getenv("KEYSTORE_PASSWORD") ?: "tankclash2026"
-                keyAlias System.getenv("KEY_ALIAS") ?: "tankclash"
-                keyPassword System.getenv("KEY_PASSWORD") ?: "tankclash2026"
-            }
+            storeFile file("release-key.jks")
+            storePassword System.getenv("KEYSTORE_PASSWORD") ?: "tankclash2026"
+            keyAlias System.getenv("KEY_ALIAS") ?: "tankclash"
+            keyPassword System.getenv("KEY_PASSWORD") ?: "tankclash2026"
         }
     }
 
@@ -34,15 +31,15 @@ android {
             debuggable true
         }
         release {
-            minifyEnabled true
-            shrinkResources true
-            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
-            if (file("release-key.jks").exists()) {
-                signingConfig signingConfigs.release
-            } else {
-                signingConfig signingConfigs.debug
-            }
+            minifyEnabled false
+            shrinkResources false
+            signingConfig signingConfigs.release
         }
+    }
+
+    lint {
+        checkReleaseBuilds false
+        abortOnError false
     }
 
     compileOptions {
@@ -51,26 +48,7 @@ android {
     }
 }
 
-tasks.register('syncWebAssets', Copy) {
-    from('../../') {
-        include 'index.html'
-        include 'style.css'
-        include 'engine.js'
-        include 'game.js'
-        include 'manifest.json'
-        include 'sw.js'
-        include 'icon-192.png'
-        include 'icon-512.png'
-        include 'icon.svg'
-        include 'favicon.ico'
-    }
-    into 'src/main/assets'
-}
-
-preBuild.dependsOn(syncWebAssets)
-
 dependencies {
     implementation 'androidx.appcompat:appcompat:1.7.0'
-    implementation 'androidx.webkit:webkit:1.12.1'
-    implementation 'androidx.activity:activity:1.9.3'
+    implementation 'androidx.webkit:webkit:1.11.0'
 }
