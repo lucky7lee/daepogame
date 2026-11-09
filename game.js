@@ -68,6 +68,8 @@
   // Web Audio API Synthesized Sound Effects
   // ==========================================
   let audioCtx = null;
+  let distortionCurveCache = null;
+  let activeFlightSound = null;
 
   function ensureAudio() {
     if (!app.soundEnabled) return null;
@@ -79,6 +81,18 @@
       audioCtx.resume().catch(() => {});
     }
     return audioCtx;
+  }
+
+  function getSoftClipCurve() {
+    if (distortionCurveCache) return distortionCurveCache;
+    const samples = 1024;
+    const curve = new Float32Array(samples);
+    for (let i = 0; i < samples; i++) {
+      const x = (i * 2) / samples - 1;
+      curve[i] = Math.tanh(x * 2.4);
+    }
+    distortionCurveCache = curve;
+    return curve;
   }
 
   function playUiClick(freq = 520) {
@@ -97,66 +111,446 @@
     osc.stop(now + 0.065);
   }
 
-  function playCannonFireSound(isHeavy = false) {
+  function stopShellFlightSound() {
+    if (!activeFlightSound) return;
+    const snd = activeFlightSound;
+    activeFlightSound = null;
+    try {
+      const now = snd.ctx.currentTime;
+      snd.masterGain.gain.cancelScheduledValues(now);
+      snd.masterGain.gain.setValueAtTime(Math.max(0.0001, snd.masterGain.gain.value || 0.08), now);
+      snd.masterGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.035);
+      setTimeout(() => {
+        for (const node of snd.sources) {
+          try {
+            node.stop();
+          } catch (e) {}
+          try {
+            node.disconnect();
+          } catch (e) {}
+        }
+        try {
+          snd.masterGain.disconnect();
+        } catch (e) {}
+      }, 45);
+    } catch (e) {}
+  }
+
+  function startShellFlightSound(weaponId = 'normal', pointCount = 55) {
+    stopShellFlightSound();
+    const ctx = ensureAudio();
+    if (!ctx) return;
+
+    const now = ctx.currentTime;
+    const dur = Math.min(3.4, Math.max(0.26, pointCount / 46));
+    const apexTime = now + dur * 0.36;
+    const endTime = now + dur;
+
+    const masterGain = ctx.createGain();
+    masterGain.gain.setValueAtTime(0.001, now);
+    masterGain.gain.linearRampToValueAtTime(0.22, now + Math.min(0.08, dur * 0.25));
+    masterGain.gain.setValueAtTime(0.22, Math.max(now + 0.09, endTime - 0.06));
+    masterGain.gain.exponentialRampToValueAtTime(0.001, endTime + 0.04);
+    masterGain.connect(ctx.destination);
+
+    const sources = [];
+
+    // 1. Aerodynamic Wind / Propulsion Rush (Bandpass-filtered noise tracking trajectory)
+    const bufLen = Math.max(1, Math.floor(ctx.sampleRate * (dur + 0.1)));
+    const noiseBuf = ctx.createBuffer(1, bufLen, ctx.sampleRate);
+    const ch = noiseBuf.getChannelData(0);
+    let prev = 0;
+    for (let i = 0; i < bufLen; i++) {
+      const white = Math.random() * 2 - 1;
+      prev = (prev + 0.08 * white) / 1.08;
+      ch[i] = (white * 0.55 + prev * 1.6) * 0.7;
+    }
+    const noiseSrc = ctx.createBufferSource();
+    noiseSrc.buffer = noiseBuf;
+
+    const aeroFilter = ctx.createBiquadFilter();
+    aeroFilter.type = 'bandpass';
+    aeroFilter.Q.value = weaponId === 'double' ? 2.4 : weaponId === 'power' ? 3.2 : 4.0;
+    const startBand = weaponId === 'double' ? 1450 : weaponId === 'power' ? 680 : 1050;
+    const apexBand = weaponId === 'double' ? 1850 : weaponId === 'power' ? 520 : 780;
+    const endBand = weaponId === 'double' ? 920 : weaponId === 'power' ? 1180 : 1380;
+    aeroFilter.frequency.setValueAtTime(startBand, now);
+    aeroFilter.frequency.exponentialRampToValueAtTime(apexBand, apexTime);
+    aeroFilter.frequency.exponentialRampToValueAtTime(endBand, endTime);
+
+    const aeroGain = ctx.createGain();
+    aeroGain.gain.value = weaponId === 'double' ? 0.85 : weaponId === 'power' ? 0.72 : 0.52;
+    noiseSrc.connect(aeroFilter).connect(aeroGain).connect(masterGain);
+    noiseSrc.start(now);
+    noiseSrc.stop(endTime + 0.05);
+    sources.push(noiseSrc);
+
+    // 2. Weapon-Specific Ballistic Whistle / Thruster / Warp Tone
+    if (weaponId === 'teleport') {
+      // Sci-Fi Warp Phase Shimmer (FM modulated dual sine)
+      const carrier = ctx.createOscillator();
+      const modOsc = ctx.createOscillator();
+      const modGain = ctx.createGain();
+      const toneGain = ctx.createGain();
+
+      carrier.type = 'sine';
+      carrier.frequency.setValueAtTime(520, now);
+      carrier.frequency.exponentialRampToValueAtTime(1180, apexTime);
+      carrier.frequency.exponentialRampToValueAtTime(640, endTime);
+
+      modOsc.type = 'sine';
+      modOsc.frequency.setValueAtTime(16, now);
+      modOsc.frequency.linearRampToValueAtTime(28, endTime);
+      modGain.gain.value = 55;
+
+      toneGain.gain.value = 0.38;
+      modOsc.connect(modGain).connect(carrier.frequency);
+      carrier.connect(toneGain).connect(masterGain);
+
+      carrier.start(now);
+      modOsc.start(now);
+      carrier.stop(endTime + 0.05);
+      modOsc.stop(endTime + 0.05);
+      sources.push(carrier, modOsc);
+    } else if (weaponId === 'power') {
+      // Heavy High-Explosive Warhead Scream + Pulsing Core Hum
+      const whistle = ctx.createOscillator();
+      const subHowl = ctx.createOscillator();
+      const lfo = ctx.createOscillator();
+      const lfoGain = ctx.createGain();
+      const wGain = ctx.createGain();
+
+      whistle.type = 'sawtooth';
+      whistle.frequency.setValueAtTime(640, now);
+      whistle.frequency.exponentialRampToValueAtTime(760, apexTime);
+      whistle.frequency.exponentialRampToValueAtTime(215, endTime);
+
+      subHowl.type = 'triangle';
+      subHowl.frequency.setValueAtTime(320, now);
+      subHowl.frequency.exponentialRampToValueAtTime(380, apexTime);
+      subHowl.frequency.exponentialRampToValueAtTime(108, endTime);
+
+      lfo.type = 'sine';
+      lfo.frequency.value = 18;
+      lfoGain.gain.value = 26;
+      lfo.connect(lfoGain).connect(whistle.frequency);
+
+      const lp = ctx.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.frequency.value = 1550;
+
+      wGain.gain.value = 0.34;
+      whistle.connect(lp);
+      subHowl.connect(lp);
+      lp.connect(wGain).connect(masterGain);
+
+      whistle.start(now);
+      subHowl.start(now);
+      lfo.start(now);
+      whistle.stop(endTime + 0.05);
+      subHowl.stop(endTime + 0.05);
+      lfo.stop(endTime + 0.05);
+      sources.push(whistle, subHowl, lfo);
+    } else if (weaponId === 'double') {
+      // High-Velocity Rocket Booster Turbine Whistle
+      const osc1 = ctx.createOscillator();
+      const osc2 = ctx.createOscillator();
+      const rGain = ctx.createGain();
+
+      osc1.type = 'triangle';
+      osc1.frequency.setValueAtTime(680, now);
+      osc1.frequency.exponentialRampToValueAtTime(1060, apexTime);
+      osc1.frequency.exponentialRampToValueAtTime(420, endTime);
+
+      osc2.type = 'sawtooth';
+      osc2.frequency.setValueAtTime(1020, now);
+      osc2.frequency.exponentialRampToValueAtTime(1480, apexTime);
+      osc2.frequency.exponentialRampToValueAtTime(590, endTime);
+
+      const bp = ctx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.value = 1100;
+      bp.Q.value = 1.8;
+
+      rGain.gain.value = 0.28;
+      osc1.connect(bp);
+      osc2.connect(bp);
+      bp.connect(rGain).connect(masterGain);
+
+      osc1.start(now);
+      osc2.start(now);
+      osc1.stop(endTime + 0.05);
+      osc2.stop(endTime + 0.05);
+      sources.push(osc1, osc2);
+    } else {
+      // Classic Artillery Shell Whistle (피유우우웅~ Doppler descent arc)
+      const whistle = ctx.createOscillator();
+      const harmonic = ctx.createOscillator();
+      const wGain = ctx.createGain();
+      const hGain = ctx.createGain();
+
+      whistle.type = 'sine';
+      whistle.frequency.setValueAtTime(840, now);
+      whistle.frequency.exponentialRampToValueAtTime(980, apexTime);
+      whistle.frequency.exponentialRampToValueAtTime(310, endTime);
+
+      harmonic.type = 'triangle';
+      harmonic.frequency.setValueAtTime(1680, now);
+      harmonic.frequency.exponentialRampToValueAtTime(1920, apexTime);
+      harmonic.frequency.exponentialRampToValueAtTime(620, endTime);
+
+      wGain.gain.value = 0.34;
+      hGain.gain.value = 0.09;
+
+      whistle.connect(wGain).connect(masterGain);
+      harmonic.connect(hGain).connect(masterGain);
+
+      whistle.start(now);
+      harmonic.start(now);
+      whistle.stop(endTime + 0.05);
+      harmonic.stop(endTime + 0.05);
+      sources.push(whistle, harmonic);
+    }
+
+    activeFlightSound = { ctx, masterGain, sources };
+  }
+
+  function playCannonFireSound(weaponOrHeavy = 'normal') {
     const ctx = ensureAudio();
     if (!ctx) return;
     const now = ctx.currentTime;
+    const wpnId =
+      weaponOrHeavy === true
+        ? 'power'
+        : typeof weaponOrHeavy === 'string'
+        ? weaponOrHeavy
+        : 'normal';
+    const isHeavy = wpnId === 'power';
+    const isRocket = wpnId === 'double';
 
-    // Punchy low thump
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.type = 'sawtooth';
-    osc.frequency.setValueAtTime(isHeavy ? 125 : 165, now);
-    osc.frequency.exponentialRampToValueAtTime(34, now + (isHeavy ? 0.36 : 0.24));
-    gain.gain.setValueAtTime(0.28, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + (isHeavy ? 0.38 : 0.26));
-    osc.connect(gain).connect(ctx.destination);
-    osc.start(now);
-    osc.stop(now + 0.4);
+    // 1. Sharp Muzzle Crack / Breech Snap
+    const crackOsc = ctx.createOscillator();
+    const crackGain = ctx.createGain();
+    crackOsc.type = 'triangle';
+    crackOsc.frequency.setValueAtTime(isHeavy ? 420 : isRocket ? 620 : 510, now);
+    crackOsc.frequency.exponentialRampToValueAtTime(68, now + 0.065);
+    crackGain.gain.setValueAtTime(0.32, now);
+    crackGain.gain.exponentialRampToValueAtTime(0.001, now + 0.07);
+    crackOsc.connect(crackGain).connect(ctx.destination);
+    crackOsc.start(now);
+    crackOsc.stop(now + 0.075);
 
-    // Noise burst
-    const bufSize = Math.floor(ctx.sampleRate * 0.22);
+    // 2. Deep Saturated Cannon Barrel Thump
+    const bodyOsc = ctx.createOscillator();
+    const subOsc = ctx.createOscillator();
+    const shaper = ctx.createWaveShaper();
+    shaper.curve = getSoftClipCurve();
+    const bodyGain = ctx.createGain();
+
+    const bodyDur = isHeavy ? 0.46 : isRocket ? 0.28 : 0.34;
+    bodyOsc.type = 'sawtooth';
+    bodyOsc.frequency.setValueAtTime(isHeavy ? 155 : isRocket ? 210 : 180, now);
+    bodyOsc.frequency.exponentialRampToValueAtTime(isHeavy ? 24 : 32, now + bodyDur);
+
+    subOsc.type = 'sine';
+    subOsc.frequency.setValueAtTime(isHeavy ? 110 : 135, now);
+    subOsc.frequency.exponentialRampToValueAtTime(22, now + bodyDur);
+
+    bodyGain.gain.setValueAtTime(isHeavy ? 0.38 : 0.32, now);
+    bodyGain.gain.exponentialRampToValueAtTime(0.001, now + bodyDur + 0.02);
+
+    bodyOsc.connect(shaper);
+    subOsc.connect(shaper);
+    shaper.connect(bodyGain).connect(ctx.destination);
+    bodyOsc.start(now);
+    subOsc.start(now);
+    bodyOsc.stop(now + bodyDur + 0.03);
+    subOsc.stop(now + bodyDur + 0.03);
+
+    // 3. Gunpowder Propellant Blast Roar
+    const noiseDur = isHeavy ? 0.34 : 0.25;
+    const bufSize = Math.floor(ctx.sampleRate * noiseDur);
     const noiseBuf = ctx.createBuffer(1, bufSize, ctx.sampleRate);
     const out = noiseBuf.getChannelData(0);
     for (let i = 0; i < bufSize; i++) {
-      out[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufSize * 0.35));
+      const env = Math.pow(1 - i / bufSize, 1.35);
+      out[i] = (Math.random() * 2 - 1) * env;
     }
     const src = ctx.createBufferSource();
     src.buffer = noiseBuf;
     const filter = ctx.createBiquadFilter();
     filter.type = 'lowpass';
-    filter.frequency.value = isHeavy ? 680 : 950;
+    filter.Q.value = 2.2;
+    filter.frequency.setValueAtTime(isHeavy ? 1250 : isRocket ? 1800 : 1450, now);
+    filter.frequency.exponentialRampToValueAtTime(140, now + noiseDur);
     const nGain = ctx.createGain();
-    nGain.gain.value = 0.24;
+    nGain.gain.setValueAtTime(isHeavy ? 0.34 : 0.28, now);
+    nGain.gain.exponentialRampToValueAtTime(0.001, now + noiseDur);
     src.connect(filter).connect(nGain).connect(ctx.destination);
     src.start(now);
   }
 
-  function playExplosionSound(radius = 48) {
+  function playExplosionSound(radius = 48, weaponId = 'normal') {
+    stopShellFlightSound();
     const ctx = ensureAudio();
     if (!ctx) return;
     const now = ctx.currentTime;
-    const dur = Math.min(0.85, 0.32 + radius * 0.005);
+    const isPower = weaponId === 'power' || radius >= 68;
+    const isDouble = weaponId === 'double';
+    const dur = Math.min(1.25, (isPower ? 0.68 : 0.44) + radius * 0.0065);
 
+    const shaper = ctx.createWaveShaper();
+    shaper.curve = getSoftClipCurve();
+
+    // Layer 1: Detonation Impact Crack (Initial high-energy transient snap)
+    const snapOsc = ctx.createOscillator();
+    const snapGain = ctx.createGain();
+    snapOsc.type = 'sawtooth';
+    snapOsc.frequency.setValueAtTime(isPower ? 520 : isDouble ? 640 : 460, now);
+    snapOsc.frequency.exponentialRampToValueAtTime(38, now + 0.085);
+    snapGain.gain.setValueAtTime(isPower ? 0.42 : 0.34, now);
+    snapGain.gain.exponentialRampToValueAtTime(0.001, now + 0.09);
+    snapOsc.connect(shaper);
+    snapOsc.connect(snapGain).connect(ctx.destination);
+    snapOsc.start(now);
+    snapOsc.stop(now + 0.095);
+
+    // Layer 2: Deep Sub-Bass Shockwave Boom (Chest-thumping low frequency wave)
+    const subOsc = ctx.createOscillator();
+    const punchOsc = ctx.createOscillator();
+    const subGain = ctx.createGain();
+    const subDur = Math.min(1.1, dur * 0.92);
+
+    subOsc.type = 'sine';
+    subOsc.frequency.setValueAtTime(isPower ? 155 : 130, now);
+    subOsc.frequency.exponentialRampToValueAtTime(isPower ? 18 : 24, now + subDur);
+
+    punchOsc.type = 'triangle';
+    punchOsc.frequency.setValueAtTime(isPower ? 220 : 185, now);
+    punchOsc.frequency.exponentialRampToValueAtTime(28, now + subDur * 0.65);
+
+    subGain.gain.setValueAtTime(isPower ? 0.48 : 0.38, now);
+    subGain.gain.exponentialRampToValueAtTime(0.001, now + subDur);
+
+    subOsc.connect(shaper);
+    punchOsc.connect(shaper);
+    shaper.connect(subGain).connect(ctx.destination);
+    subOsc.start(now);
+    punchOsc.start(now);
+    subOsc.stop(now + subDur + 0.02);
+    punchOsc.stop(now + subDur * 0.68);
+
+    // Layer 3: Fiery Blast Roar (Full-bodied textured explosion noise)
     const bufSize = Math.floor(ctx.sampleRate * dur);
     const noiseBuf = ctx.createBuffer(1, bufSize, ctx.sampleRate);
     const data = noiseBuf.getChannelData(0);
+    let brown = 0;
     for (let i = 0; i < bufSize; i++) {
-      data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / bufSize, 1.4);
+      const t = i / bufSize;
+      const white = Math.random() * 2 - 1;
+      brown = (brown + 0.06 * white) / 1.06;
+      const attack = Math.min(1, i / (ctx.sampleRate * 0.008));
+      const decay = Math.pow(1 - t, isPower ? 1.15 : 1.45);
+      // Add subtle rumble modulation in the tail
+      const rumbleMod = 0.82 + 0.18 * Math.sin(i * 0.015);
+      data[i] = (white * 0.55 + brown * 2.1) * attack * decay * rumbleMod;
     }
     const src = ctx.createBufferSource();
     src.buffer = noiseBuf;
 
     const filter = ctx.createBiquadFilter();
     filter.type = 'lowpass';
-    filter.frequency.setValueAtTime(520, now);
-    filter.frequency.exponentialRampToValueAtTime(75, now + dur);
+    filter.Q.value = isPower ? 3.0 : 2.1;
+    filter.frequency.setValueAtTime(isPower ? 1850 : 1450, now);
+    filter.frequency.exponentialRampToValueAtTime(isPower ? 52 : 68, now + dur);
 
     const gain = ctx.createGain();
-    gain.gain.setValueAtTime(Math.min(0.42, 0.2 + radius * 0.0025), now);
+    const peakGain = Math.min(0.52, (isPower ? 0.36 : 0.28) + radius * 0.0025);
+    gain.gain.setValueAtTime(peakGain, now);
     gain.gain.exponentialRampToValueAtTime(0.001, now + dur);
 
     src.connect(filter).connect(gain).connect(ctx.destination);
+    src.start(now);
+
+    // Layer 4: Secondary Debris & Earth/Rock Crumble Tail
+    const debrisCount = isPower ? 4 : 2;
+    for (let d = 0; d < debrisCount; d++) {
+      const delay = 0.07 + d * 0.085 + Math.random() * 0.04;
+      const dDur = 0.12 + Math.random() * 0.1;
+      const dLen = Math.floor(ctx.sampleRate * dDur);
+      const dBuf = ctx.createBuffer(1, dLen, ctx.sampleRate);
+      const dCh = dBuf.getChannelData(0);
+      for (let i = 0; i < dLen; i++) {
+        dCh[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / dLen, 1.8);
+      }
+      const dSrc = ctx.createBufferSource();
+      dSrc.buffer = dBuf;
+      const dBp = ctx.createBiquadFilter();
+      dBp.type = 'bandpass';
+      dBp.frequency.value = 320 + d * 190;
+      dBp.Q.value = 1.6;
+      const dGain = ctx.createGain();
+      dGain.gain.setValueAtTime(0.14 * Math.pow(0.78, d), now + delay);
+      dGain.gain.exponentialRampToValueAtTime(0.001, now + delay + dDur);
+      dSrc.connect(dBp).connect(dGain).connect(ctx.destination);
+      dSrc.start(now + delay);
+    }
+
+    // Layer 5: High-Explosive (고폭탄) Seismic Aftershock & Plasma Crackle
+    if (isPower) {
+      const quakeOsc = ctx.createOscillator();
+      const quakeGain = ctx.createGain();
+      quakeOsc.type = 'sawtooth';
+      quakeOsc.frequency.setValueAtTime(86, now + 0.05);
+      quakeOsc.frequency.exponentialRampToValueAtTime(16, now + 1.05);
+      const quakeLp = ctx.createBiquadFilter();
+      quakeLp.type = 'lowpass';
+      quakeLp.frequency.value = 140;
+      quakeGain.gain.setValueAtTime(0.28, now + 0.05);
+      quakeGain.gain.exponentialRampToValueAtTime(0.001, now + 1.08);
+      quakeOsc.connect(quakeLp).connect(quakeGain).connect(ctx.destination);
+      quakeOsc.start(now + 0.05);
+      quakeOsc.stop(now + 1.1);
+    }
+  }
+
+  function playWaterSplashSound() {
+    stopShellFlightSound();
+    const ctx = ensureAudio();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+
+    // 1. Plunge Bubble Pitch-Up ("풍덩!")
+    const plungeOsc = ctx.createOscillator();
+    const plungeGain = ctx.createGain();
+    plungeOsc.type = 'sine';
+    plungeOsc.frequency.setValueAtTime(145, now);
+    plungeOsc.frequency.exponentialRampToValueAtTime(520, now + 0.19);
+    plungeGain.gain.setValueAtTime(0.26, now);
+    plungeGain.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
+    plungeOsc.connect(plungeGain).connect(ctx.destination);
+    plungeOsc.start(now);
+    plungeOsc.stop(now + 0.23);
+
+    // 2. Water Spray Splash ("쏴아아~")
+    const dur = 0.45;
+    const bufSize = Math.floor(ctx.sampleRate * dur);
+    const noiseBuf = ctx.createBuffer(1, bufSize, ctx.sampleRate);
+    const data = noiseBuf.getChannelData(0);
+    for (let i = 0; i < bufSize; i++) {
+      data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / bufSize, 1.3);
+    }
+    const src = ctx.createBufferSource();
+    src.buffer = noiseBuf;
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.Q.value = 1.5;
+    bp.frequency.setValueAtTime(1150, now);
+    bp.frequency.exponentialRampToValueAtTime(280, now + dur);
+    const sGain = ctx.createGain();
+    sGain.gain.setValueAtTime(0.24, now);
+    sGain.gain.exponentialRampToValueAtTime(0.001, now + dur);
+    src.connect(bp).connect(sGain).connect(ctx.destination);
     src.start(now);
   }
 
@@ -266,8 +660,11 @@
   // Screen Navigation
   // ==========================================
   function showScreen(name) {
+    if (name !== 'game') {
+      stopShellFlightSound();
+    }
     app.screen = name;
-    const screens = ['menu', 'single-setup', 'lobby', 'room', 'game'];
+    const screens = ['menu', 'single-setup', 'lobby', 'room', 'guide', 'game'];
     for (const s of screens) {
       const el = document.getElementById(`screen-${s}`);
       if (el) el.classList.toggle('hidden', s !== name);
@@ -856,7 +1253,7 @@
 
     const isPower = weaponId === 'power';
     const isDouble = weaponId === 'double';
-    playExplosionSound(radius);
+    playExplosionSound(radius, weaponId);
     app.camera.shake = Math.min(isPower ? 24 : 18, (isPower ? 10 : 6) + radius * 0.16);
     app.explosions.push({
       x,
@@ -968,13 +1365,14 @@
         return;
       }
 
-      playCannonFireSound(result.weaponId === 'power');
+      const wpnId = result.weaponId || 'normal';
+      playCannonFireSound(wpnId);
+      startShellFlightSound(wpnId, pts.length);
       app.camera.mode = 'followShell';
       updateFloatingRecenterBtn();
 
       // Weapon-specific Muzzle Flash Particles
       const startPt = pts[0];
-      const wpnId = result.weaponId || 'normal';
       const muzzleColor =
         wpnId === 'teleport'
           ? '#67e8f9'
@@ -1008,6 +1406,7 @@
         head: { x: startPt.x, y: startPt.y, angle: initAng },
         trail: [{ x: startPt.x, y: startPt.y, angle: initAng }],
         onImpact: () => {
+          stopShellFlightSound();
           app.activeShell = null;
 
           // Carve crater right at the exact impact moment!
@@ -1027,7 +1426,7 @@
               shooter.y = Engine.getTerrainY(app.renderMatch.terrain, shooter.x);
             }
           } else if (proj.hitType === 'water') {
-            playUiClick(190);
+            playWaterSplashSound();
             app.floatingTexts.push({
               x: proj.hitX,
               y: Engine.WATER_LEVEL - 18,
@@ -2413,11 +2812,14 @@
   }
 
   function renderTankCardPreviews() {
-    document.querySelectorAll('#single-tank-grid .tank-card').forEach((card) => {
-      const tType = card.getAttribute('data-tank') || 'cannon';
-      const icoSpan = card.querySelector('.t-icon');
-      if (!icoSpan) return;
+    const colors = {
+      cannon: { main: '#38bdf8', dark: '#0284c7', light: '#bae6fd' },
+      duke: { main: '#fb7185', dark: '#e11d48', light: '#fecdd3' },
+      multi: { main: '#fbbf24', dark: '#d97706', light: '#fde68a' },
+      laser: { main: '#34d399', dark: '#059669', light: '#a7f3d0' }
+    };
 
+    function makeTankPreviewCanvas(tType) {
       const cvs = document.createElement('canvas');
       cvs.width = 148;
       cvs.height = 88;
@@ -2427,12 +2829,6 @@
 
       const c = cvs.getContext('2d');
       c.scale(2, 2);
-      const colors = {
-        cannon: { main: '#38bdf8', dark: '#0284c7', light: '#bae6fd' },
-        duke: { main: '#fb7185', dark: '#e11d48', light: '#fecdd3' },
-        multi: { main: '#fbbf24', dark: '#d97706', light: '#fde68a' },
-        laser: { main: '#34d399', dark: '#059669', light: '#a7f3d0' }
-      };
       const pal = colors[tType] || colors.cannon;
       const pivY = getTankLocalPivotY(tType);
 
@@ -2448,9 +2844,21 @@
       c.scale(0.82, 0.82);
       drawTankBodyByType(c, tType, pal.main, pal.dark, pal.light, 0);
       c.restore();
+      return cvs;
+    }
 
+    document.querySelectorAll('#single-tank-grid .tank-card').forEach((card) => {
+      const tType = card.getAttribute('data-tank') || 'cannon';
+      const icoSpan = card.querySelector('.t-icon');
+      if (!icoSpan) return;
       icoSpan.innerHTML = '';
-      icoSpan.appendChild(cvs);
+      icoSpan.appendChild(makeTankPreviewCanvas(tType));
+    });
+
+    document.querySelectorAll('#guide-tank-cards [data-tank-preview]').forEach((box) => {
+      const tType = box.getAttribute('data-tank-preview') || 'cannon';
+      box.innerHTML = '';
+      box.appendChild(makeTankPreviewCanvas(tType));
     });
   }
 
@@ -3904,7 +4312,11 @@
     const toggleSound = () => {
       app.soundEnabled = !app.soundEnabled;
       saveProfile();
-      if (app.soundEnabled) playUiClick(600);
+      if (app.soundEnabled) {
+        playUiClick(600);
+      } else {
+        stopShellFlightSound();
+      }
     };
     document.getElementById('btn-sound-toggle').addEventListener('click', toggleSound);
     document.getElementById('btn-battle-sound').addEventListener('click', toggleSound);
@@ -3941,6 +4353,33 @@
       ensureNetworkConnected();
       netSend({ type: 'get_rooms' });
     });
+
+    // Home Menu -> Game Guide & Spec Encyclopedia
+    const btnGoGuide = document.getElementById('btn-go-guide');
+    if (btnGoGuide) {
+      btnGoGuide.addEventListener('click', () => {
+        playUiClick(560);
+        showScreen('guide');
+        const guideScroll = document.querySelector('#screen-guide .guide-scroll');
+        if (guideScroll) guideScroll.scrollTop = 0;
+      });
+    }
+
+    const btnGuideBack = document.getElementById('btn-guide-back');
+    if (btnGuideBack) {
+      btnGuideBack.addEventListener('click', () => {
+        playUiClick(420);
+        showScreen('menu');
+      });
+    }
+
+    const btnGuideBottomBack = document.getElementById('btn-guide-bottom-back');
+    if (btnGuideBottomBack) {
+      btnGuideBottomBack.addEventListener('click', () => {
+        playUiClick(420);
+        showScreen('menu');
+      });
+    }
 
     // Single Setup Navigation & Selections
     document.getElementById('btn-single-back').addEventListener('click', () => {

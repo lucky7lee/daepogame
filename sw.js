@@ -1,11 +1,11 @@
 // Service Worker for DAEPO FORTRESS PWA Installation
-const CACHE_NAME = 'daepo-fortress-v7';
+const CACHE_NAME = 'daepo-fortress-v8';
 const ASSETS = [
   './',
   './index.html',
-  './style.css?v=7',
-  './engine.js?v=7',
-  './game.js?v=7',
+  './style.css?v=8',
+  './engine.js?v=8',
+  './game.js?v=8',
   './manifest.json',
   './icon-192.png',
   './icon-512.png',

@@ -13,7 +13,7 @@
   <link rel="Shortcut Icon" href="favicon.ico" />
   <link rel="apple-touch-icon" href="icon-192.png" />
   <title>포트리스 대포대전 - 1~4인 턴제 대포 게임</title>
-  <link rel="stylesheet" href="style.css?v=7" />
+  <link rel="stylesheet" href="style.css?v=8" />
 </head>
 <body>
   <div class="app-shell">
@@ -80,6 +80,15 @@
               <div class="mode-detail">대기실 방 생성 · 참여 인원수(2~4명) 맞춤 대전</div>
             </div>
             <span class="mode-arrow">입장 ▶</span>
+          </button>
+
+          <button id="btn-go-guide" class="mode-card guide" type="button">
+            <div class="mode-emoji">📖</div>
+            <div class="mode-info">
+              <div class="mode-title">게임설명 (가이드 & 스펙)</div>
+              <div class="mode-detail">게임 상세 내용 · 플레이 방법 · 포탄/탱크 스펙 · HP 차감표</div>
+            </div>
+            <span class="mode-arrow">보기 ▶</span>
           </button>
         </div>
       </div>
@@ -292,6 +301,333 @@
     </section>
 
     <!-- ==========================================
+         4-B. GAME GUIDE & SPEC ENCYCLOPEDIA SCREEN
+         ========================================== -->
+    <section id="screen-guide" class="screen-view hidden">
+      <div class="nav-subbar">
+        <button id="btn-guide-back" class="pill-btn" type="button">◀ 홈으로</button>
+        <span class="subbar-title">📖 게임설명 & 스펙 가이드</span>
+        <span class="subbar-spacer"></span>
+      </div>
+
+      <div class="guide-scroll">
+        <!-- 1. Game Overview -->
+        <div class="guide-card">
+          <div class="guide-sec-hdr">
+            <span class="guide-sec-ico">🎯</span>
+            <div>
+              <h2 class="guide-sec-title">포트리스 대포대전 게임 소개</h2>
+              <p class="guide-sec-sub">바람과 지형 고저차를 계산해 포물선 탄도로 상대를 격파하는 1~4인 턴제 포격 게임</p>
+            </div>
+          </div>
+          <div class="guide-feature-grid">
+            <div class="guide-feat-item">
+              <strong>📐 실시간 포물선 & 바람 물리</strong>
+              <p>중력과 매 턴 변화하는 바람(좌/우 풍속 0~15)이 포탄 궤적에 실시간으로 작용합니다.</p>
+            </div>
+            <div class="guide-feat-item">
+              <strong>🌋 지형 파괴 & 수장(낙사) 격파</strong>
+              <p>포탄 폭발 시 지형이 깊게 파이며, 탱크가 수면(WATER) 아래로 빠지면 남은 체력과 관계없이 즉시 격파됩니다.</p>
+            </div>
+            <div class="guide-feat-item">
+              <strong>🤖 영점 조절 AI 싱글 모드 (1~4인)</strong>
+              <p>AI 1~3기를 추가해 2~4인용 대전을 즐기거나, 한 기기 교대 플레이(2~4인) 및 1인 사격 연습이 가능합니다.</p>
+            </div>
+            <div class="guide-feat-item">
+              <strong>🌐 실시간 멀티 대기실 (2~4인)</strong>
+              <p>대기실 방에 참여한 인원수(2명→2인용, 3명→3인용, 4명→4인용)에 맞춰 실시간 온라인 대전이 진행됩니다.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- 2. How to Play & Controls -->
+        <div class="guide-card">
+          <div class="guide-sec-hdr">
+            <span class="guide-sec-ico">🕹️</span>
+            <div>
+              <h2 class="guide-sec-title">플레이 방법 & 조작 가이드</h2>
+              <p class="guide-sec-sub">각 플레이어는 자신의 턴(제한시간 35초)마다 아래 순서로 행동합니다</p>
+            </div>
+          </div>
+
+          <div class="guide-steps-list">
+            <div class="guide-step-row">
+              <span class="g-step-num">1</span>
+              <div class="g-step-body">
+                <strong>탱크 이동 & 방향 전환 (◀ / ▶)</strong>
+                <p>턴마다 충전되는 연료(⛽)를 사용해 유리한 고지대나 엄폐 지형으로 이동하고 사격 방향(좌/우)을 잡습니다.</p>
+              </div>
+            </div>
+            <div class="guide-step-row">
+              <span class="g-step-num">2</span>
+              <div class="g-step-body">
+                <strong>포신 각도 조절 (▲ / ▼)</strong>
+                <p>탱크별 허용 각도 범위 내에서 포신 각도를 조절합니다. 고각 사격일수록 바람의 영향을 더 많이 받습니다.</p>
+              </div>
+            </div>
+            <div class="guide-step-row">
+              <span class="g-step-num">3</span>
+              <div class="g-step-body">
+                <strong>무기(포탄) 선택 & 전장 정찰</strong>
+                <p>하단 무기 슬롯에서 사용할 탄을 고릅니다. 화면을 좌우로 드래그하거나 <strong>상단 HP 카드 / 미니맵</strong>을 터치하면 상대 위치와 거리를 즉시 확인할 수 있습니다.</p>
+              </div>
+            </div>
+            <div class="guide-step-row">
+              <span class="g-step-num">4</span>
+              <div class="g-step-body">
+                <strong>파워 조절 & 발사 (🔥 발사!)</strong>
+                <p>파워 게이지(10~100)를 맞춰 발사합니다. 게이지 위의 <strong>주황색 눈금</strong>은 내 직전 턴 발사 파워를 표시해 영점 보정을 도와줍니다.</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="guide-ctrl-compare">
+            <div class="guide-ctrl-box">
+              <div class="g-ctrl-tag">📱 스마트폰 / 마우스 조작</div>
+              <ul>
+                <li><strong>이동 / 각도 / 파워</strong>: 하단 버튼 터치 (길게 누르면 연속 조절) 또는 파워 게이지 드래그</li>
+                <li><strong>화면 좌우 스크롤</strong>: 전장 배경을 손가락/마우스로 좌우 드래그 또는 미니맵 터치</li>
+                <li><strong>상대 위치 확인</strong>: 상단 플레이어 HP 현황판 카드를 터치하면 해당 탱크로 카메라 이동</li>
+              </ul>
+            </div>
+            <div class="guide-ctrl-box">
+              <div class="g-ctrl-tag">⌨️ PC 키보드 단축키</div>
+              <ul>
+                <li><strong>← / → 방향키</strong>: 탱크 좌/우 이동 및 조준 방향 전환</li>
+                <li><strong>↑ / ↓ 방향키</strong>: 대포 포신 각도 올리기 / 내리기</li>
+                <li><strong>Spacebar (길게 누르기)</strong>: 파워 게이지 차징 후 떼면 즉시 발사</li>
+                <li><strong>Enter 키</strong>: 현재 설정된 파워 수치로 즉시 발사</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <!-- 3. Weapons & Shells Specification -->
+        <div class="guide-card">
+          <div class="guide-sec-hdr">
+            <span class="guide-sec-ico">💣</span>
+            <div>
+              <h2 class="guide-sec-title">포탄(무기) 종류별 상세 스펙</h2>
+              <p class="guide-sec-sub">포탄마다 비행 외형·사운드·폭발 반경·지형 파괴력이 다르게 설계되어 있습니다</p>
+            </div>
+          </div>
+
+          <div class="guide-table-wrap">
+            <table class="guide-spec-table">
+              <thead>
+                <tr>
+                  <th>포탄 종류</th>
+                  <th>보유 탄수</th>
+                  <th>발사 수</th>
+                  <th>기본 데미지</th>
+                  <th>폭발 반경</th>
+                  <th>지형 파괴</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="td-name"><span class="w-badge normal">💣 일반탄</span></td>
+                  <td><strong>∞ (무제한)</strong></td>
+                  <td>1발</td>
+                  <td><strong class="txt-dmg">42</strong></td>
+                  <td>68 px</td>
+                  <td>46 px</td>
+                </tr>
+                <tr>
+                  <td class="td-name"><span class="w-badge double">🚀 더블샷</span></td>
+                  <td><strong>2회</strong></td>
+                  <td>연속 2발</td>
+                  <td><strong class="txt-dmg">29 × 2 (58)</strong></td>
+                  <td>58 px</td>
+                  <td>36 px</td>
+                </tr>
+                <tr>
+                  <td class="td-name"><span class="w-badge power">☢️ 고폭탄</span></td>
+                  <td><strong>2회</strong></td>
+                  <td>1발</td>
+                  <td><strong class="txt-dmg-hi">62</strong></td>
+                  <td>96 px</td>
+                  <td>74 px</td>
+                </tr>
+                <tr>
+                  <td class="td-name"><span class="w-badge teleport">🌀 이동탄</span></td>
+                  <td><strong>1회</strong></td>
+                  <td>1발</td>
+                  <td><span class="txt-muted">0 (피해 없음)</span></td>
+                  <td>-</td>
+                  <td>-</td>
+                </tr>
+                <tr>
+                  <td class="td-name"><span class="w-badge heal">🔧 수리키트</span></td>
+                  <td><strong>1회</strong></td>
+                  <td>즉시 발동</td>
+                  <td><strong class="txt-heal">+35 HP 회복</strong></td>
+                  <td>-</td>
+                  <td>-</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="guide-wpn-notes">
+            <div class="g-wpn-note"><strong>💣 일반탄</strong>: 황금빛 화염 궤적을 그리며 날아가는 표준 철갑탄으로 탄수 제한 없이 사용할 수 있습니다.</div>
+            <div class="g-wpn-note"><strong>🚀 더블샷</strong>: 청록색 부스터를 분사하는 소형 로켓탄 2발을 연속 발사합니다. 2발 모두 명중 시 일반탄보다 높은 피해를 입힙니다.</div>
+            <div class="g-wpn-note"><strong>☢️ 고폭탄</strong>: 경기당 <strong>2발</strong> 지급되는 초강력 중량 탄두입니다. 넓은 폭발 반경(96px)과 거대한 크레이터(74px)를 생성합니다.</div>
+            <div class="g-wpn-note"><strong>🌀 이동탄 & 🔧 수리키트</strong>: 이동탄은 탄착 지점으로 내 탱크를 순간이동시키며, 수리키트는 턴을 사용해 체력을 즉시 <strong>+35 회복</strong>합니다.</div>
+          </div>
+        </div>
+
+        <!-- 4. Tank Specifications -->
+        <div class="guide-card">
+          <div class="guide-sec-hdr">
+            <span class="guide-sec-ico">🛡️</span>
+            <div>
+              <h2 class="guide-sec-title">탱크 종류별 상세 스펙</h2>
+              <p class="guide-sec-sub">4종의 탱크는 고유한 외형과 체력·연료·화력 배율·지형 파괴 배율을 가집니다</p>
+            </div>
+          </div>
+
+          <div id="guide-tank-cards" class="guide-tank-grid">
+            <div class="guide-tank-item" data-guide-tank="cannon">
+              <div class="gt-top">
+                <div class="gt-preview" data-tank-preview="cannon">🛡️</div>
+                <div class="gt-titles">
+                  <strong>캐논 (CANNON)</strong>
+                  <span>밸런스 표준형 전차</span>
+                </div>
+              </div>
+              <div class="gt-stats">
+                <span>최대 HP <strong>100</strong></span>
+                <span>이동 연료 <strong>120</strong></span>
+                <span>화력 배율 <strong class="txt-accent">×1.05</strong></span>
+                <span>지형 파괴 <strong>×1.05</strong></span>
+                <span>포신 각도 <strong>8° ~ 84°</strong></span>
+              </div>
+            </div>
+
+            <div class="guide-tank-item" data-guide-tank="duke">
+              <div class="gt-top">
+                <div class="gt-preview" data-tank-preview="duke">💥</div>
+                <div class="gt-titles">
+                  <strong>헤비듀크 (HEAVY DUKE)</strong>
+                  <span>강력한 화력형 중전차</span>
+                </div>
+              </div>
+              <div class="gt-stats">
+                <span>최대 HP <strong class="txt-heal">110</strong></span>
+                <span>이동 연료 <strong>95</strong></span>
+                <span>화력 배율 <strong class="txt-dmg-hi">×1.18</strong></span>
+                <span>지형 파괴 <strong>×0.96</strong></span>
+                <span>포신 각도 <strong>10° ~ 80°</strong></span>
+              </div>
+            </div>
+
+            <div class="guide-tank-item" data-guide-tank="multi">
+              <div class="gt-top">
+                <div class="gt-preview" data-tank-preview="multi">🌋</div>
+                <div class="gt-titles">
+                  <strong>크레이터 (CRATER)</strong>
+                  <span>지형 파괴 특화 자주포</span>
+                </div>
+              </div>
+              <div class="gt-stats">
+                <span>최대 HP <strong>100</strong></span>
+                <span>이동 연료 <strong>110</strong></span>
+                <span>화력 배율 <strong>×0.95</strong></span>
+                <span>지형 파괴 <strong class="txt-dmg">×1.38</strong></span>
+                <span>포신 각도 <strong>6° ~ 86°</strong></span>
+              </div>
+            </div>
+
+            <div class="guide-tank-item" data-guide-tank="laser">
+              <div class="gt-top">
+                <div class="gt-preview" data-tank-preview="laser">⚡</div>
+                <div class="gt-titles">
+                  <strong>스피드 (SPEED)</strong>
+                  <span>장거리 기동형 호버 전차</span>
+                </div>
+              </div>
+              <div class="gt-stats">
+                <span>최대 HP <strong>95</strong></span>
+                <span>이동 연료 <strong class="txt-accent">165</strong></span>
+                <span>화력 배율 <strong>×1.02</strong></span>
+                <span>지형 파괴 <strong>×0.90</strong></span>
+                <span>포신 각도 <strong>5° ~ 85°</strong></span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 5. HP Deduction Matrix Table & Splash Formula -->
+        <div class="guide-card">
+          <div class="guide-sec-hdr">
+            <span class="guide-sec-ico">📊</span>
+            <div>
+              <h2 class="guide-sec-title">포탄 × 탱크별 HP 차감량 표</h2>
+              <p class="guide-sec-sub">발사한 탱크의 화력 배율(dmgMult)이 적용된 직격 시 실제 HP 차감 수치입니다</p>
+            </div>
+          </div>
+
+          <div class="guide-table-wrap">
+            <table class="guide-spec-table hp-matrix-table">
+              <thead>
+                <tr>
+                  <th>발사 탱크 (화력 배율)</th>
+                  <th>💣 일반탄 직격</th>
+                  <th>🚀 더블샷 (1발 / 2발 합산)</th>
+                  <th>☢️ 고폭탄 직격</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="td-name"><strong>🛡️ 캐논</strong> <small>(×1.05)</small></td>
+                  <td><strong class="txt-dmg">-44 HP</strong></td>
+                  <td><strong>-30 HP</strong> / <strong class="txt-dmg">-60 HP</strong></td>
+                  <td><strong class="txt-dmg-hi">-65 HP</strong></td>
+                </tr>
+                <tr>
+                  <td class="td-name"><strong>💥 헤비듀크</strong> <small>(×1.18)</small></td>
+                  <td><strong class="txt-dmg">-50 HP</strong></td>
+                  <td><strong>-34 HP</strong> / <strong class="txt-dmg">-68 HP</strong></td>
+                  <td><strong class="txt-dmg-hi">-73 HP</strong></td>
+                </tr>
+                <tr>
+                  <td class="td-name"><strong>🌋 크레이터</strong> <small>(×0.95)</small></td>
+                  <td><strong class="txt-dmg">-40 HP</strong></td>
+                  <td><strong>-28 HP</strong> / <strong class="txt-dmg">-56 HP</strong></td>
+                  <td><strong class="txt-dmg-hi">-59 HP</strong></td>
+                </tr>
+                <tr>
+                  <td class="td-name"><strong>⚡ 스피드</strong> <small>(×1.02)</small></td>
+                  <td><strong class="txt-dmg">-43 HP</strong></td>
+                  <td><strong>-30 HP</strong> / <strong class="txt-dmg">-60 HP</strong></td>
+                  <td><strong class="txt-dmg-hi">-63 HP</strong></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="guide-formula-box">
+            <div class="gf-row">
+              <span class="gf-badge direct">🎯 직격 판정 (100% 피해)</span>
+              <p>탱크 중심으로부터 약 <strong>14.3 px 이내</strong>에 탄착하면 위 표의 최대 HP 차감량이 100% 적용됩니다.</p>
+            </div>
+            <div class="gf-row">
+              <span class="gf-badge splash">💥 폭발 반경 스플래시 감쇠</span>
+              <p>정통으로 맞지 않더라도 포탄별 <strong>폭발 반경(splashRadius)</strong> 안에 들어오면 거리에 비례해 피해량이 선형 감쇠하며, 폭발 반경 끝자락에 스치면 최대 데미지의 <strong>약 22% (최소 -4 HP 보장)</strong>가 차감됩니다.</p>
+            </div>
+            <div class="gf-row">
+              <span class="gf-badge sink">🌊 수장(낙사) 즉사 판정</span>
+              <p>지형 파괴 크레이터로 인해 바닥이 무너져 탱크가 수면(WATER) 아래로 빠지면 남은 HP와 관계없이 <strong>즉시 격파(-999 HP)</strong>됩니다.</p>
+            </div>
+          </div>
+        </div>
+
+        <button id="btn-guide-bottom-back" class="primary-cta-btn" type="button">◀ 메인 화면으로 돌아가기</button>
+      </div>
+    </section>
+
+    <!-- ==========================================
          5. BATTLEFIELD GAME SCREEN (PC & Mobile Optimized)
          ========================================== -->
     <section id="screen-game" class="screen-view game-screen hidden">
@@ -456,7 +792,7 @@
     </div>
   </div>
 
-  <script src="engine.js?v=7"></script>
-  <script src="game.js?v=7"></script>
+  <script src="engine.js?v=8"></script>
+  <script src="game.js?v=8"></script>
 </body>
 </html>
