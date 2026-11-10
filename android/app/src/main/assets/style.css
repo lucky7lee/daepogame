@@ -293,6 +293,10 @@ input {
   width: 80px;
   height: 80px;
   flex: 0 0 80px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   border-radius: 22px;
   padding: 4px;
   background: linear-gradient(135deg, rgba(56, 189, 248, 0.45), rgba(249, 115, 22, 0.45));
@@ -303,8 +307,10 @@ input {
   width: 100%;
   height: 100%;
   aspect-ratio: 1 / 1;
+  object-fit: cover;
   border-radius: 18px;
   display: block;
+  margin: 0 auto;
 }
 
 .hero-title {
@@ -394,8 +400,9 @@ input {
 .mode-cards {
   width: 100%;
   max-width: 480px;
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-auto-rows: 1fr;
   gap: 12px;
 }
 
@@ -404,7 +411,9 @@ input {
   align-items: center;
   gap: 14px;
   width: 100%;
-  padding: 18px 18px;
+  height: 100%;
+  min-height: 88px;
+  padding: 16px 18px;
   border-radius: 18px;
   border: 1px solid var(--border-subtle);
   cursor: pointer;
@@ -435,8 +444,17 @@ input {
 }
 
 .mode-emoji {
-  font-size: 2rem;
-  flex: 0 0 auto;
+  width: 48px;
+  height: 48px;
+  flex: 0 0 48px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 14px;
+  background: rgba(15, 23, 42, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  font-size: 1.75rem;
+  line-height: 1;
 }
 
 .mode-info {
@@ -1134,6 +1152,21 @@ input {
   font-size: 0.66rem;
   font-weight: 800;
   letter-spacing: 0.03em;
+}
+
+.level-pill {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.28), rgba(217, 119, 6, 0.22));
+  border: 1.5px solid rgba(251, 191, 36, 0.65);
+  color: #fef08a;
+  font-size: 0.74rem;
+  font-weight: 900;
+  white-space: nowrap;
 }
 
 .turn-pill {
@@ -2456,9 +2489,16 @@ input {
     font-size: 0.74rem;
   }
 
+  .hero-icon-wrap {
+    width: 72px;
+    height: 72px;
+    flex: 0 0 72px;
+    margin: 0 auto;
+  }
+
   .hero-logo {
-    width: 62px;
-    height: 62px;
+    width: 100%;
+    height: 100%;
   }
 
   .hero-title {
@@ -2466,15 +2506,17 @@ input {
   }
 
   .mode-card {
+    min-height: 78px;
+    height: 100%;
     padding: 13px 12px;
     gap: 10px;
   }
 
   .mode-emoji {
-    width: 42px;
-    height: 42px;
-    flex: 0 0 42px;
-    font-size: 1.35rem;
+    width: 44px;
+    height: 44px;
+    flex: 0 0 44px;
+    font-size: 1.4rem;
   }
 
   .mode-title {

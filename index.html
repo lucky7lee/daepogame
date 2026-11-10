@@ -13,7 +13,7 @@
   <link rel="Shortcut Icon" href="favicon.ico" />
   <link rel="apple-touch-icon" href="icon-192.png" />
   <title>탱크 클래시 (Tank Clash) - 1~4인 턴제 대포 게임</title>
-  <link rel="stylesheet" href="style.css?v=9" />
+  <link rel="stylesheet" href="style.css?v=10" />
 </head>
 <body>
   <div class="app-shell">
@@ -69,7 +69,7 @@
             <div class="mode-emoji">🤖</div>
             <div class="mode-info">
               <div class="mode-title">싱글 게임 (1~4인)</div>
-              <div class="mode-detail">AI 1~3명 추가 대전 · 로컬 교대 · 영점 연습</div>
+              <div class="mode-detail">AI 1~3명 (1~30레벨 돌파) · 로컬 교대 · 영점 연습</div>
             </div>
             <span class="mode-arrow">설정 ▶</span>
           </button>
@@ -87,7 +87,7 @@
             <div class="mode-emoji">📖</div>
             <div class="mode-info">
               <div class="mode-title">게임설명 (가이드 & 스펙)</div>
-              <div class="mode-detail">게임 상세 내용 · 플레이 방법 · 포탄/탱크 스펙 · HP 차감표</div>
+              <div class="mode-detail">플레이 방법 · 포탄/탱크 스펙 · HP 차감표</div>
             </div>
             <span class="mode-arrow">보기 ▶</span>
           </button>
@@ -108,9 +108,9 @@
       <div class="setup-scroll">
         <!-- Sub-mode Toggle: vs AI or Pass-and-Play -->
         <div class="setup-block">
-          <div class="block-label">플레이 방식</div>
+          <div class="block-label">플레이 방식 (AI 대전 시 1레벨 ~ 30레벨 돌파 모드)</div>
           <div class="tab-row">
-            <button id="tab-single-ai" class="tab-btn active" type="button">🤖 AI 추가 대전 (나 + AI)</button>
+            <button id="tab-single-ai" class="tab-btn active" type="button">🤖 AI 추가 대전 (1~30레벨)</button>
             <button id="tab-single-local" class="tab-btn" type="button">👥 한 기기 교대 (2~4인)</button>
           </div>
 
@@ -119,17 +119,17 @@
             <button class="count-card active" data-ai-count="1" type="button">
               <span class="c-badge">2인용</span>
               <strong>AI 1명 추가</strong>
-              <small>나 vs 영점조절 AI 1기</small>
+              <small>1~30레벨 (나 vs AI 1기)</small>
             </button>
             <button class="count-card" data-ai-count="2" type="button">
               <span class="c-badge">3인용</span>
               <strong>AI 2명 추가</strong>
-              <small>나 + AI 2기 개인전</small>
+              <small>1~30레벨 (나 + AI 2기)</small>
             </button>
             <button class="count-card" data-ai-count="3" type="button">
               <span class="c-badge">4인용</span>
               <strong>AI 3명 추가</strong>
-              <small>나 + AI 3기 대난투</small>
+              <small>1~30레벨 (나 + AI 3기)</small>
             </button>
             <button class="count-card" data-ai-count="0" type="button">
               <span class="c-badge practice">1인용</span>
@@ -637,6 +637,7 @@
         <div class="bt-left">
           <button id="btn-battle-exit" class="bt-btn exit" type="button">◀ 나가기</button>
           <span class="bt-game-brand" title="탱크 클래시 (Tank Clash)">탱크 클래시 <small>Tank Clash</small></span>
+          <span id="battle-level-badge" class="level-pill hidden" title="싱글 AI 대전 레벨 (1~30레벨)">LV.1 / 30</span>
           <div id="turn-indicator" class="turn-pill">
             <span id="turn-badge-dot">🔵</span>
             <span id="turn-player-name">내 턴</span>
@@ -794,7 +795,7 @@
     </div>
   </div>
 
-  <script src="engine.js?v=9"></script>
-  <script src="game.js?v=9"></script>
+  <script src="engine.js?v=10"></script>
+  <script src="game.js?v=10"></script>
 </body>
 </html>

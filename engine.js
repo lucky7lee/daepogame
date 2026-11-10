@@ -22,6 +22,39 @@
   const TANK_HIT_RADIUS = 22;
   const BARREL_LENGTH = 28;
   const TURN_FUEL_DEFAULT = 120;
+  const MAX_AI_LEVEL = 30;
+
+  function getAiLevelSpec(rawLevel) {
+    const level = clamp(Math.round(Number(rawLevel) || 1), 1, MAX_AI_LEVEL);
+    const t = (level - 1) / (MAX_AI_LEVEL - 1); // 0.0 at Lv.1 -> 1.0 at Lv.30
+
+    let tierName = '훈련병';
+    if (level >= 30) tierName = '전설보스';
+    else if (level >= 26) tierName = '마스터';
+    else if (level >= 21) tierName = '에이스';
+    else if (level >= 16) tierName = '정예병';
+    else if (level >= 11) tierName = '숙련병';
+    else if (level >= 6) tierName = '일반병';
+
+    return {
+      level,
+      t,
+      tierName,
+      hpScale: +(0.78 + 0.50 * Math.pow(t, 1.15)).toFixed(2),
+      dmgScale: +(0.72 + 0.50 * Math.pow(t, 1.15)).toFixed(2),
+      initAngleScatter: 19 - 17.5 * t,
+      initPowerScatterMin: 20 * Math.pow(1 - t, 1.35) + 0.5,
+      initPowerScatterMax: 34 * Math.pow(1 - t, 1.35) + 2.0,
+      windFactor: clamp((level - 2) / 22, 0, 1),
+      zeroingDecayBase: 0.80 - 0.62 * Math.pow(t, 0.85),
+      baseZeroAngErr: 14 * (1 - 0.82 * t),
+      baseZeroPowErr: 25 * (1 - 0.85 * t),
+      minPowerNoiseFloor: 8.5 * Math.pow(Math.max(0, 1 - t * 1.35), 1.4),
+      healChance: level <= 4 ? 0 : clamp(0.15 + 0.78 * t, 0.15, 0.92),
+      specialWeaponChance: level <= 5 ? 0 : clamp(0.18 + 0.72 * t, 0.18, 0.90),
+      humanTargetBonus: Math.round(140 * Math.pow(t, 1.2))
+    };
+  }
 
   const PLAYER_PALETTE = [
     { name: '1P 블루', main: '#38bdf8', dark: '#0284c7', light: '#bae6fd', badge: '🔵' },
@@ -420,6 +453,8 @@
   // playersConfig: [{ id, nickname, isAi, tankType, slotIndex }]
   function createMatch(options) {
     const seed = (options && options.seed) || Math.floor(Math.random() * 2147483640) + 1;
+    const aiLevel = clamp(Math.round(Number(options && options.aiLevel) || 1), 1, MAX_AI_LEVEL);
+    const aiSpec = getAiLevelSpec(aiLevel);
     const rng = mulberry32(seed + 7919);
     const gen = generateTerrain(seed, options && options.mapType);
     const terrain = gen.terrain;
@@ -456,11 +491,18 @@
       const groundY = getTerrainY(terrain, spawnX);
       const facing = spawnX > WORLD_WIDTH * 0.5 ? -1 : 1;
 
+      const isAiPlayer = Boolean(cfg.isAi);
+      const scaledMaxHp = isAiPlayer
+        ? Math.max(60, Math.round((tankSpec.maxHp * aiSpec.hpScale) / 5) * 5)
+        : tankSpec.maxHp;
+
       return {
         id: String(cfg.id || `p_${idx + 1}`),
         slot: idx,
-        nickname: cfg.nickname || (cfg.isAi ? `AI-${idx}` : `P${idx + 1}`),
-        isAi: Boolean(cfg.isAi),
+        nickname: cfg.nickname || (isAiPlayer ? `AI-${idx}` : `P${idx + 1}`),
+        isAi: isAiPlayer,
+        aiLevel: isAiPlayer ? aiLevel : 0,
+        aiDmgScale: isAiPlayer ? aiSpec.dmgScale : 1.0,
         tankType: tankSpec.id,
         color: palette.main,
         colorDark: palette.dark,
@@ -472,8 +514,8 @@
         angle: 45,
         power: 58,
         lastPower: null,
-        hp: tankSpec.maxHp,
-        maxHp: tankSpec.maxHp,
+        hp: scaledMaxHp,
+        maxHp: scaledMaxHp,
         fuel: tankSpec.maxFuel,
         maxFuel: tankSpec.maxFuel,
         alive: true,
@@ -517,6 +559,7 @@
 
     return {
       seed,
+      aiLevel,
       rngState: Math.floor(rng() * 2147483640) + 1,
       mapType,
       terrain,
@@ -931,7 +974,8 @@
       } else if (trace.hitType === 'terrain' || trace.hitType === 'tank') {
         const craterR = Math.round(weapon.craterRadius * tankSpec.craterMult);
         const splashR = weapon.splashRadius;
-        const maxDmg = weapon.baseDamage * tankSpec.dmgMult;
+        const aiDmgMult = shooter.isAi && shooter.aiDmgScale ? shooter.aiDmgScale : 1.0;
+        const maxDmg = weapon.baseDamage * tankSpec.dmgMult * aiDmgMult;
 
         // Calculate blast damage to all alive tanks within splashRadius
         for (const target of match.players) {
@@ -1032,13 +1076,18 @@
   }
 
   // ==========================================
-  // AI Zeroing-In (영점 조절) Implementation
+  // AI Zeroing-In (영점 조절) + 1~30 Level Difficulty Scaling
   // 1. Calculates horizontal/vertical distance to target
-  // 2. Starts with wide random angle/power error on initial shot
+  // 2. Starts with level-scaled angle/power error on initial shot
   // 3. Uses shot impact feedback to progressively shrink error and lock onto target
   // ==========================================
   function solveBallisticPower(match, shooter, target, angleDeg, includeWind) {
-    const windToUse = includeWind ? match.wind : 0;
+    const windToUse =
+      typeof includeWind === 'number'
+        ? match.wind * includeWind
+        : includeWind
+        ? match.wind
+        : 0;
     const muzzle = getMuzzlePosition(shooter, match.terrain, angleDeg);
     const dxGoal = Math.abs(target.x - muzzle.x);
 
@@ -1108,19 +1157,20 @@
     const ai = match.players[aiIdx];
     if (!ai || !ai.alive) return null;
     const tankSpec = TANK_TYPES[ai.tankType] || TANK_TYPES.cannon;
+    const aiSpec = getAiLevelSpec(match.aiLevel || ai.aiLevel || 1);
 
     const rSeed = stepMatchRng(match);
     const rng = mulberry32(Math.floor(rSeed * 2147483640) + match.turnNumber * 131 + aiIdx * 17);
 
-    // 1. Emergency Repair if low HP
-    if (ai.hp <= 42 && ai.ammo.heal > 0 && rng() < 0.72) {
+    // 1. Emergency Repair if low HP (scaled by AI level)
+    if (ai.hp <= 42 && ai.ammo.heal > 0 && aiSpec.healChance > 0 && rng() < aiSpec.healChance) {
       return {
         moves: [],
         facing: ai.facing,
         angle: ai.angle,
         power: ai.power,
         weapon: 'heal',
-        aiNote: '🔧 긴급 수리 키트 사용!'
+        aiNote: `🔧 [Lv.${aiSpec.level} ${aiSpec.tierName}] 긴급 수리 키트 사용!`
       };
     }
 
@@ -1133,9 +1183,9 @@
     for (const e of enemies) {
       const dist = Math.abs(e.x - ai.x);
       const mem = ai.aiMemory[e.id];
-      const lockBonus = mem ? mem.shots * 240 : 0;
-      const humanBonus = !e.isAi ? 120 : 0;
-      const lowHpBonus = (110 - e.hp) * 2.2;
+      const lockBonus = mem ? mem.shots * (150 + aiSpec.level * 5) : 0;
+      const humanBonus = !e.isAi ? aiSpec.humanTargetBonus : 0;
+      const lowHpBonus = (130 - e.hp) * (1.2 + aiSpec.level * 0.06);
       const score = -dist * 0.45 + lockBonus + humanBonus + lowHpBonus + rng() * 90;
       if (score > bestScore) {
         bestScore = score;
@@ -1145,11 +1195,12 @@
 
     // 3. Optional slight movement (avoid cliff edge or reposition slightly)
     const moves = [];
-    if (ai.fuel >= 25 && (ai.y > WATER_LEVEL - 48 || rng() < 0.45)) {
+    const moveProb = 0.25 + (aiSpec.level / MAX_AI_LEVEL) * 0.3;
+    if (ai.fuel >= 25 && (ai.y > WATER_LEVEL - 48 || rng() < moveProb)) {
       const wantDir =
         ai.x < 140 ? 1 : ai.x > WORLD_WIDTH - 140 ? -1 : target.x > ai.x ? 1 : -1;
-      const moveDir = rng() < 0.7 ? wantDir : -wantDir;
-      const moveSteps = 4 + Math.floor(rng() * 7);
+      const moveDir = rng() < 0.72 ? wantDir : -wantDir;
+      const moveSteps = 3 + Math.floor(rng() * 7);
       for (let m = 0; m < moveSteps; m++) {
         if (moveTank(match, aiIdx, moveDir, 4.5)) {
           moves.push({ x: +ai.x.toFixed(1), y: +ai.y.toFixed(1), facing: ai.facing, fuel: ai.fuel });
@@ -1174,8 +1225,9 @@
     const mem = ai.aiMemory[target.id];
     const targetMovedDist = Math.abs(target.x - mem.lastTargetX);
     if (targetMovedDist > 65 && mem.shots > 0) {
-      // Target moved! Partially degrade zeroing lock proportional to move distance
-      mem.shots = Math.max(1, mem.shots - (targetMovedDist > 140 ? 2 : 1));
+      // Target moved! High-level AI retains lock better when target moves
+      const degrade = aiSpec.level >= 24 ? 1 : targetMovedDist > 140 ? 2 : 1;
+      mem.shots = Math.max(1, mem.shots - degrade);
     }
 
     // 5. Determine optimal feasible angle (42~55 deg for long range, higher if obstacle blocks)
@@ -1183,49 +1235,55 @@
     let baseAngle = dx > 1650 ? 45 : mem.preferredAngle;
     baseAngle = clamp(baseAngle, tankSpec.minAngle + 5, Math.min(68, tankSpec.maxAngle - 4));
 
-    // 6. Compute baseline power & apply progressive Zeroing-In error decay!
-    // Shot 0 (Initial): Parabolic distance formula + wide random scatter
-    // Shot 1: Error cut by ~60%
-    // Shot 2: Error cut by ~82%
-    // Shot 3+: Locked-on precision!
+    // 6. Compute baseline power & apply Level 1~30 Zeroing-In error scaling!
     const shots = mem.shots;
     let chosenAngle;
     let chosenPower;
     let aiStageNote;
 
     if (shots === 0) {
-      // Initial shot: textbook parabolic distance formula R = v^2 sin(2θ) / g + wide random error!
-      const dy = ai.y - target.y; // positive if target is higher up
-      const angleNoise = (rng() * 2 - 1) * 9;
-      chosenAngle = clamp(Math.round(baseAngle + angleNoise), 32, 62);
+      const angleNoise = (rng() * 2 - 1) * aiSpec.initAngleScatter;
+      chosenAngle = clamp(Math.round(baseAngle + angleNoise), 32, 64);
 
-      const rad = (chosenAngle * Math.PI) / 180;
-      const sin2 = Math.max(0.35, Math.sin(2 * rad));
-      const effectiveRange = Math.max(120, dx + dy * 0.85);
-      const v0 = Math.sqrt((effectiveRange * GRAVITY) / sin2);
-      const roughPower = v0 / POWER_VELOCITY_SCALE;
+      let roughPower;
+      if (aiSpec.level >= 22) {
+        // High-level AI (Lv.22~30) already factors in terrain and wind on initial shot
+        const solvedInit = solveBallisticPower(match, ai, target, chosenAngle, aiSpec.windFactor);
+        roughPower = solvedInit.power;
+      } else {
+        // Lower/mid-level AI uses textbook parabolic formula without full wind compensation on first shot
+        const dy = ai.y - target.y;
+        const rad = (chosenAngle * Math.PI) / 180;
+        const sin2 = Math.max(0.35, Math.sin(2 * rad));
+        const effectiveRange = Math.max(120, dx + dy * 0.85);
+        const v0 = Math.sqrt((effectiveRange * GRAVITY) / sin2);
+        roughPower = v0 / POWER_VELOCITY_SCALE;
+      }
 
       const randSign = rng() < 0.5 ? -1 : 1;
-      const powerNoise = randSign * (9 + rng() * 12);
+      const scatterSpan = Math.max(0.5, aiSpec.initPowerScatterMax - aiSpec.initPowerScatterMin);
+      const powerNoise = randSign * (aiSpec.initPowerScatterMin + rng() * scatterSpan);
 
-      chosenPower = clamp(Math.round(roughPower + powerNoise), 14, 99);
-      aiStageNote = `📡 거리 ${Math.round(dx)}m 측정 → 초기 탐색 사격`;
+      chosenPower = clamp(Math.round((roughPower + powerNoise) * 10) / 10, 12, 99);
+      aiStageNote =
+        aiSpec.level >= 25
+          ? `📡 [Lv.${aiSpec.level} ${aiSpec.tierName}] 정밀 레이더 초탄 조준 (${Math.round(dx)}m)`
+          : `📡 [Lv.${aiSpec.level} ${aiSpec.tierName}] 거리 ${Math.round(dx)}m 초기 탐색 사격`;
     } else {
       // Find clean trajectory angle that clears any ridge/crater lip with margin
-      let bestCand = solveBallisticPower(match, ai, target, baseAngle, true);
+      let bestCand = solveBallisticPower(match, ai, target, baseAngle, aiSpec.windFactor);
       let bestAng = baseAngle;
       const candidates = [baseAngle, 48, 56, 64, 72, 78, 40];
       let bestComposite = Infinity;
       for (const ca of candidates) {
         if (ca < tankSpec.minAngle || ca > tankSpec.maxAngle) continue;
-        const cand = solveBallisticPower(match, ai, target, ca, true);
-        // Check sensitivity to -1 power so AI doesn't graze a ridge by 1px
+        const cand = solveBallisticPower(match, ai, target, ca, aiSpec.windFactor);
         const checkLow = quickSimulateLanding(
           getMuzzlePosition(ai, match.terrain, ca),
           ai.facing,
           ca,
           Math.max(10, cand.power - 1.0),
-          match.wind,
+          match.wind * aiSpec.windFactor,
           match.terrain,
           target
         );
@@ -1238,34 +1296,35 @@
         }
       }
 
-      // Exponential error decay with each consecutive shot
-      const decay = Math.pow(0.38, shots); // shot1: 0.38, shot2: 0.144, shot3: 0.055
-      const maxAngErr = 8 * decay;
-      const maxPowErr = 17 * decay;
+      // Level-scaled error decay with each consecutive shot
+      const decay = Math.pow(aiSpec.zeroingDecayBase, shots);
+      const maxAngErr = Math.max(aiSpec.level >= 28 ? 0 : 0.8, aiSpec.baseZeroAngErr * decay);
+      const maxPowErr = Math.max(aiSpec.minPowerNoiseFloor, aiSpec.baseZeroPowErr * decay);
 
       const angErr = (rng() * 2 - 1) * maxAngErr;
       chosenAngle = clamp(Math.round(bestAng + angErr), tankSpec.minAngle, tankSpec.maxAngle);
 
-      // Solve exact power for chosenAngle, then inject decaying power error
-      const exactForChosen = solveBallisticPower(match, ai, target, chosenAngle, true);
+      const exactForChosen = solveBallisticPower(match, ai, target, chosenAngle, aiSpec.windFactor);
       const powErr = (rng() * 2 - 1) * maxPowErr;
       chosenPower = clamp(Math.round((exactForChosen.power + powErr) * 10) / 10, 12, 100);
 
       if (shots === 1) {
-        aiStageNote = '🎯 탄착 오차 분석 → 1차 영점 보정';
+        aiStageNote = `🎯 [Lv.${aiSpec.level} ${aiSpec.tierName}] 탄착 오차 분석 → 1차 영점 보정`;
       } else if (shots === 2) {
-        aiStageNote = '🎯 정밀 영점 수렴 중 (오차 대폭 감소)';
+        aiStageNote = `🎯 [Lv.${aiSpec.level} ${aiSpec.tierName}] 정밀 영점 수렴 중`;
       } else {
-        aiStageNote = '🔥 영점 조준 완료! 정밀 포격';
+        aiStageNote = `🔥 [Lv.${aiSpec.level} ${aiSpec.tierName}] 영점 고정 완료! 정밀 포격`;
       }
     }
 
-    // Choose special weapon once zeroing confidence is high
+    // Choose special weapon based on AI level and zeroing confidence
     let weapon = 'normal';
-    if (shots >= 2) {
-      if (ai.ammo.power > 0 && rng() < 0.55) {
+    const canUseSpecial =
+      aiSpec.specialWeaponChance > 0 && (shots >= 2 || (aiSpec.level >= 22 && shots >= 1));
+    if (canUseSpecial) {
+      if (ai.ammo.power > 0 && rng() < aiSpec.specialWeaponChance) {
         weapon = 'power';
-      } else if (ai.ammo.double > 0 && rng() < 0.65) {
+      } else if (ai.ammo.double > 0 && rng() < aiSpec.specialWeaponChance * 1.1) {
         weapon = 'double';
       }
     }
@@ -1315,6 +1374,8 @@
       slot: p.slot,
       nickname: p.nickname,
       isAi: p.isAi,
+      aiLevel: p.aiLevel || 0,
+      aiDmgScale: p.aiDmgScale || 1,
       tankType: p.tankType,
       color: p.color,
       colorDark: p.colorDark,
@@ -1343,6 +1404,7 @@
     return {
       seed: match.seed,
       mapType: match.mapType,
+      aiLevel: match.aiLevel || 1,
       terrain: Array.from(match.terrain, (v) => Math.round(v * 10) / 10),
       wind: match.wind,
       turnIndex: match.turnIndex,
@@ -1367,11 +1429,13 @@
     TANK_HIT_RADIUS,
     BARREL_LENGTH,
     TURN_FUEL_DEFAULT,
+    MAX_AI_LEVEL,
     PLAYER_PALETTE,
     TANK_TYPES,
     WEAPONS,
     MAP_THEMES,
     MAP_TYPE_LIST,
+    getAiLevelSpec,
     mulberry32,
     clamp,
     generateTerrain,

@@ -19,6 +19,8 @@
     mode: 'single', // 'single' | 'multi'
     singleSubMode: 'ai', // 'ai' | 'local'
     aiCount: 1, // 1->2P, 2->3P, 3->4P, 0->1P practice
+    aiLevel: 1, // 1~30 level progression in Single AI mode
+    lastSingleAiOutcome: null, // 'win' | 'lose' | 'draw'
     localCount: 2, // 2~4P pass-and-play
     myTankType: 'cannon',
     selectedMapType: 'random',
@@ -848,6 +850,7 @@
     app.renderMatch = {
       seed: exported.seed,
       mapType: exported.mapType,
+      aiLevel: exported.aiLevel || app.aiLevel || 1,
       terrain: new Float32Array(exported.terrain),
       wind: exported.wind,
       turnIndex: exported.turnIndex,
@@ -877,6 +880,9 @@
     document.getElementById('gameover-modal').classList.add('hidden');
 
     app.mode = 'single';
+    const maxLv = Engine.MAX_AI_LEVEL || 30;
+    app.aiLevel = Engine.clamp(Math.round(Number(app.aiLevel) || 1), 1, maxLv);
+    const aiSpec = Engine.getAiLevelSpec ? Engine.getAiLevelSpec(app.aiLevel) : { level: app.aiLevel, tierName: 'AI' };
     const playerConfigs = [];
 
     if (app.singleSubMode === 'ai') {
@@ -889,13 +895,14 @@
       });
 
       const aiTankPool = ['cannon', 'duke', 'multi', 'laser'];
-      const aiNames = ['알파포병(AI)', '호크아이(AI)', '아이언돔(AI)'];
+      const aiBaseNames = ['알파포병', '호크아이', '아이언돔'];
       for (let i = 0; i < app.aiCount; i++) {
+        const baseName = aiBaseNames[i] || `AI-${i + 1}`;
         playerConfigs.push({
           id: `ai_${i + 1}`,
-          nickname: aiNames[i] || `AI-${i + 1}`,
+          nickname: `Lv.${app.aiLevel} ${baseName}`,
           isAi: true,
-          tankType: aiTankPool[(i + 1) % aiTankPool.length]
+          tankType: aiTankPool[(i + 1 + app.aiLevel) % aiTankPool.length]
         });
       }
     } else {
@@ -913,6 +920,7 @@
 
     app.localEngineMatch = Engine.createMatch({
       mapType: app.selectedMapType,
+      aiLevel: app.aiLevel,
       players: playerConfigs
     });
 
@@ -926,6 +934,11 @@
     const themeName = (Engine.MAP_THEMES[app.renderMatch.mapType] || {}).name || '랜덤 전장';
     if (app.renderMatch.isPractice) {
       showToast(`🎯 탱크 클래시 영점 사격 연습! (${themeName}) — 바람과 거리를 계산해 표적을 맞히세요`, 3200);
+    } else if (app.singleSubMode === 'ai') {
+      showToast(
+        `💣 [LV.${app.aiLevel}/${maxLv} · ${aiSpec.tierName}] ${totalP}인용 탱크 클래시 시작! [지형: ${themeName}]`,
+        2900
+      );
     } else {
       showToast(`💣 ${totalP}인용 탱크 클래시 (Tank Clash) 시작! [지형: ${themeName}]`, 2600);
     }
@@ -1532,35 +1545,59 @@
     let outcome = 'draw';
     let titleText = '🤝 무승부!';
     let subText = '동시에 모든 탱크가 파괴되었습니다.';
+    let customBadgeText = null;
+    let customRematchText = null;
 
     if (app.singleSubMode === 'local') {
+      app.lastSingleAiOutcome = null;
       const winner = match.players.find((p) => p.id === match.winnerId);
       outcome = winner ? 'win' : 'draw';
       titleText = winner ? `🏆 ${winner.nickname} 최종 승리!` : '🤝 무승부!';
       subText = `${match.players.length}인 로컬 교대 대전 종료`;
     } else {
+      const maxLv = Engine.MAX_AI_LEVEL || 30;
+      const curLv = Engine.clamp(Math.round(Number(app.aiLevel) || 1), 1, maxLv);
       if (!match.winnerId) {
         outcome = 'draw';
         app.stats.draws += 1;
+        app.lastSingleAiOutcome = 'draw';
+        customBadgeText = `DRAW · LV.${curLv} / ${maxLv}`;
+        titleText = `🤝 ${curLv}레벨 무승부!`;
+        subText = `아쉽게 동시 파괴되었습니다. ${curLv}레벨을 다시 도전하거나 게임에서 나갈 수 있습니다.`;
+        customRematchText = `🔄 ${curLv}레벨 다시 하기`;
       } else if (match.winnerId === app.myClientId) {
         outcome = 'win';
         app.stats.wins += 1;
-        titleText = '🏆 최종 승리!';
-        subText = `AI ${app.aiCount}기를 상대로 전장을 제패했습니다!`;
+        app.lastSingleAiOutcome = 'win';
+        if (curLv < maxLv) {
+          const nextSpec = Engine.getAiLevelSpec ? Engine.getAiLevelSpec(curLv + 1) : { tierName: 'AI' };
+          customBadgeText = `STAGE CLEAR · LV.${curLv} / ${maxLv}`;
+          titleText = `🏆 ${curLv}레벨 클리어!`;
+          subText = `AI ${app.aiCount}기를 격파했습니다! 다음 단계(${curLv + 1}레벨 · ${nextSpec.tierName})로 진격하세요!`;
+          customRematchText = `▶️ 다음 레벨 (${curLv + 1}레벨) 진격!`;
+        } else {
+          customBadgeText = `ALL CLEAR · LV.${maxLv} MASTER`;
+          titleText = `👑 ${maxLv}레벨 최종 제패!`;
+          subText = `축하합니다! 1레벨부터 ${maxLv}레벨까지 모든 AI 전장을 완벽히 정복했습니다!`;
+          customRematchText = `🔄 1레벨부터 다시 도전`;
+        }
       } else {
         outcome = 'lose';
         app.stats.losses += 1;
+        app.lastSingleAiOutcome = 'lose';
         const winAi = match.players.find((p) => p.id === match.winnerId);
-        titleText = '💔 아쉽게 패배...';
-        subText = `${winAi ? winAi.nickname : 'AI'}가 영점을 맞춰 승리했습니다!`;
+        customBadgeText = `DEFEAT · LV.${curLv} / ${maxLv}`;
+        titleText = `💔 ${curLv}레벨 돌파 실패...`;
+        subText = `${winAi ? winAi.nickname : 'AI'}에게 패배했습니다. ${curLv}레벨을 다시 하거나 게임에서 나갈 수 있습니다.`;
+        customRematchText = `🔄 ${curLv}레벨 다시 하기`;
       }
       saveProfile();
     }
 
-    openResultModal(outcome, titleText, subText, rankings);
+    openResultModal(outcome, titleText, subText, rankings, customBadgeText, customRematchText);
   }
 
-  function openResultModal(outcome, titleText, subText, rankings) {
+  function openResultModal(outcome, titleText, subText, rankings, customBadgeText, customRematchText) {
     playFanfareSound(outcome);
     const modal = document.getElementById('gameover-modal');
     const badge = document.getElementById('modal-result-badge');
@@ -1568,14 +1605,23 @@
     const sub = document.getElementById('modal-result-sub');
     const list = document.getElementById('modal-ranking-list');
     const rematchBtn = document.getElementById('btn-modal-rematch');
+    const exitBtn = document.getElementById('btn-modal-exit');
 
     badge.className = `result-badge ${outcome}`;
-    badge.textContent = outcome === 'win' ? 'VICTORY' : outcome === 'lose' ? 'DEFEAT' : 'DRAW';
+    badge.textContent =
+      customBadgeText || (outcome === 'win' ? 'VICTORY' : outcome === 'lose' ? 'DEFEAT' : 'DRAW');
     title.textContent = titleText;
     sub.textContent = subText;
 
     if (rematchBtn) {
-      rematchBtn.textContent = app.mode === 'multi' ? '🔄 대기방으로 (재경기)' : '🔄 새 맵에서 다시하기';
+      if (customRematchText) {
+        rematchBtn.textContent = customRematchText;
+      } else {
+        rematchBtn.textContent = app.mode === 'multi' ? '🔄 대기방으로 (재경기)' : '🔄 새 맵에서 다시하기';
+      }
+    }
+    if (exitBtn) {
+      exitBtn.textContent = '🚪 게임 나가기';
     }
 
     list.innerHTML = '';
@@ -1607,6 +1653,21 @@
     const active = getActivePlayer();
     const dotEl = document.getElementById('turn-badge-dot');
     const nameEl = document.getElementById('turn-player-name');
+    const lvBadge = document.getElementById('battle-level-badge');
+
+    if (lvBadge) {
+      const showLv =
+        app.mode === 'single' && app.singleSubMode === 'ai' && !app.renderMatch.isPractice;
+      if (showLv) {
+        const maxLv = Engine.MAX_AI_LEVEL || 30;
+        const curLv = Engine.clamp(Math.round(Number(app.aiLevel) || 1), 1, maxLv);
+        const aiSpec = Engine.getAiLevelSpec ? Engine.getAiLevelSpec(curLv) : { tierName: 'AI' };
+        lvBadge.textContent = `LV.${curLv}/${maxLv} · ${aiSpec.tierName}`;
+        lvBadge.classList.remove('hidden');
+      } else {
+        lvBadge.classList.add('hidden');
+      }
+    }
 
     if (active) {
       if (dotEl) dotEl.textContent = active.badge || '🔵';
@@ -4466,6 +4527,8 @@
 
     document.getElementById('btn-start-single').addEventListener('click', () => {
       playUiClick(660);
+      app.aiLevel = 1;
+      app.lastSingleAiOutcome = null;
       startSingleGame();
     });
 
@@ -4583,6 +4646,13 @@
       document.getElementById('gameover-modal').classList.add('hidden');
       playUiClick(620);
       if (app.mode === 'single') {
+        if (app.singleSubMode === 'ai' && app.aiCount > 0) {
+          const maxLv = Engine.MAX_AI_LEVEL || 30;
+          if (app.lastSingleAiOutcome === 'win') {
+            app.aiLevel = app.aiLevel < maxLv ? app.aiLevel + 1 : 1;
+          }
+          app.lastSingleAiOutcome = null;
+        }
         startSingleGame();
       } else {
         netSend({ type: 'back_to_room' });
