@@ -45,12 +45,11 @@ public class MainActivity extends Activity {
     private static final String APP_START_URL = "https://appassets.androidplatform.net/assets/index.html";
 
     // =========================================================================
-    // Google Official AdMob Test Ad Unit IDs
-    // (Replace with your production AdMob Ad Unit IDs after AdMob approval)
+    // Google AdMob Production Ad Unit IDs
     // =========================================================================
-    private static final String ADMOB_BANNER_UNIT_ID = "ca-app-pub-3940256099942544/6300978111";
-    private static final String ADMOB_INTERSTITIAL_UNIT_ID = "ca-app-pub-3940256099942544/1033173712";
-    private static final String ADMOB_REWARDED_UNIT_ID = "ca-app-pub-3940256099942544/5224354917";
+    private static final String ADMOB_BANNER_UNIT_ID = "ca-app-pub-6785485516818041/1382021853";
+    private static final String ADMOB_INTERSTITIAL_UNIT_ID = "ca-app-pub-6785485516818041/6578508218";
+    private static final String ADMOB_REWARDED_UNIT_ID = "ca-app-pub-6785485516818041/3652961979";
 
     private WebView webView;
     private FrameLayout bannerContainer;
@@ -396,6 +395,13 @@ public class MainActivity extends Activity {
                         @Override
                         public void onAdDismissedFullScreenContent() {
                             preloadRewardedAd();
+                            if (!earnedFlag[0]) {
+                                Toast.makeText(
+                                        MainActivity.this,
+                                        "광고를 끝까지 시청해야 보급품을 받을 수 있습니다.",
+                                        Toast.LENGTH_SHORT
+                                ).show();
+                            }
                             notifyJsRewardEarned(rewardType, earnedFlag[0]);
                         }
 
@@ -413,7 +419,7 @@ public class MainActivity extends Activity {
                     preloadRewardedAd();
                     Toast.makeText(
                             MainActivity.this,
-                            "테스트 광고를 불러오는 중입니다. 잠시 후 다시 시도해 주세요!",
+                            "광고를 불러오는 중입니다. 잠시 후 다시 시도해 주세요!",
                             Toast.LENGTH_SHORT
                     ).show();
                     notifyJsRewardEarned(rewardType, false);

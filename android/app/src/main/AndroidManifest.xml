@@ -30,10 +30,10 @@
         android:appCategory="game"
         android:theme="@style/Theme.TankClash">
 
-        <!-- Google AdMob App ID (Currently set to Google Official Test App ID; replace with real AdMob App ID for production payout) -->
+        <!-- Google AdMob Production App ID -->
         <meta-data
             android:name="com.google.android.gms.ads.APPLICATION_ID"
-            android:value="ca-app-pub-3940256099942544~3347511713" />
+            android:value="ca-app-pub-6785485516818041~1592940693" />
 
         <activity
             android:name=".MainActivity"

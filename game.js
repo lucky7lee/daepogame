@@ -716,12 +716,7 @@
     if (pendingRewardedCb) {
       const fn = pendingRewardedCb;
       pendingRewardedCb = null;
-      if (earned) {
-        fn(true);
-      } else {
-        // Fallback to test ad modal if test ad was still loading or offline
-        showWebTestAdModal('rewarded', 3, () => fn(true));
-      }
+      fn(Boolean(earned));
     }
   };
 
@@ -758,8 +753,8 @@
     }
     if (unitEl) {
       unitEl.textContent = isRewarded
-        ? 'ca-app-pub-3940256099942544/5224354917'
-        : 'ca-app-pub-3940256099942544/1033173712';
+        ? 'ca-app-pub-6785485516818041/3652961979'
+        : 'ca-app-pub-6785485516818041/6578508218';
     }
 
     let left = durationSec;
