@@ -29,6 +29,8 @@
     myClientId: 'u_' + Math.random().toString(36).slice(2, 9),
     soundEnabled: true,
     stats: { wins: 0, losses: 0, draws: 0 },
+    bonusSupplyArmed: false,
+    completedMatchesCount: 0,
 
     // Multiplayer Room State
     currentRoom: null,
@@ -674,10 +676,185 @@
     const hdr = document.getElementById('global-header');
     if (hdr) hdr.classList.toggle('hidden', name === 'game');
 
+    // AdMob Banner visibility: show on Menu / Setup / Lobby / Room / Guide, hide during active battle
+    const showBanner = name !== 'game';
+    if (window.TankClashAndroid && typeof window.TankClashAndroid.setBannerVisible === 'function') {
+      try {
+        window.TankClashAndroid.setBannerVisible(showBanner);
+      } catch (e) {}
+    }
+    const webBanner = document.getElementById('web-ad-banner');
+    if (webBanner) {
+      webBanner.classList.toggle('hidden', isNativeAndroidApp() || !showBanner);
+    }
+
+    syncRewardSupplyUI();
+
     if (name === 'game') {
       requestAnimationFrame(() => {
         resizeBattleCanvas();
       });
+    }
+  }
+
+  // ==========================================
+  // Google AdMob Bridge (Banner + Interstitial + Rewarded Ads)
+  // ==========================================
+  let pendingInterstitialCb = null;
+  let pendingRewardedCb = null;
+  let testAdTimerInterval = null;
+
+  window.onNativeAdClosed = function (callbackId, adType, shown) {
+    if (pendingInterstitialCb) {
+      const fn = pendingInterstitialCb;
+      pendingInterstitialCb = null;
+      fn(Boolean(shown));
+    }
+  };
+
+  window.onNativeRewardEarned = function (rewardType, earned) {
+    if (pendingRewardedCb) {
+      const fn = pendingRewardedCb;
+      pendingRewardedCb = null;
+      if (earned) {
+        fn(true);
+      } else {
+        // Fallback to test ad modal if test ad was still loading or offline
+        showWebTestAdModal('rewarded', 3, () => fn(true));
+      }
+    }
+  };
+
+  function showWebTestAdModal(kind, durationSec, onComplete) {
+    const modal = document.getElementById('test-ad-modal');
+    const badge = document.getElementById('test-ad-badge');
+    const timerEl = document.getElementById('test-ad-timer');
+    const titleEl = document.getElementById('test-ad-title');
+    const kindEl = document.getElementById('test-ad-kind-label');
+    const unitEl = document.getElementById('test-ad-unit-id');
+    const closeBtn = document.getElementById('btn-test-ad-close');
+
+    if (!modal || !closeBtn) {
+      if (onComplete) onComplete();
+      return;
+    }
+
+    if (testAdTimerInterval) {
+      clearInterval(testAdTimerInterval);
+      testAdTimerInterval = null;
+    }
+
+    const isRewarded = kind === 'rewarded';
+    if (badge) badge.textContent = isRewarded ? 'AdMob Rewarded Test' : 'AdMob Interstitial Test';
+    if (titleEl) {
+      titleEl.textContent = isRewarded
+        ? '📺 Google AdMob 보상형 테스트 광고'
+        : '📺 Google AdMob 전면 테스트 광고';
+    }
+    if (kindEl) {
+      kindEl.textContent = isRewarded
+        ? '보상형 동영상 광고 (고폭탄+1 · 더블샷+1 · 수리+1 · HP+15)'
+        : '전면 광고 (경기 종료 후 2판마다 노출)';
+    }
+    if (unitEl) {
+      unitEl.textContent = isRewarded
+        ? 'ca-app-pub-3940256099942544/5224354917'
+        : 'ca-app-pub-3940256099942544/1033173712';
+    }
+
+    let left = durationSec;
+    closeBtn.disabled = true;
+    closeBtn.textContent = `⏳ 광고 시청 중... (${left}s)`;
+    if (timerEl) timerEl.textContent = `${left}초 남음`;
+    modal.classList.remove('hidden');
+
+    testAdTimerInterval = setInterval(() => {
+      left -= 1;
+      if (left > 0) {
+        closeBtn.textContent = `⏳ 광고 시청 중... (${left}s)`;
+        if (timerEl) timerEl.textContent = `${left}초 남음`;
+      } else {
+        clearInterval(testAdTimerInterval);
+        testAdTimerInterval = null;
+        closeBtn.disabled = false;
+        closeBtn.textContent = isRewarded ? '🎁 보상 받고 닫기 ✕' : '▶️ 광고 닫고 계속하기 ✕';
+        if (timerEl) timerEl.textContent = '시청 완료';
+      }
+    }, 1000);
+
+    closeBtn.onclick = () => {
+      if (closeBtn.disabled) return;
+      modal.classList.add('hidden');
+      playUiClick(640);
+      if (onComplete) onComplete();
+    };
+  }
+
+  function requestInterstitialAd(onDone) {
+    if (window.TankClashAndroid && typeof window.TankClashAndroid.showInterstitialAd === 'function') {
+      pendingInterstitialCb = () => {
+        if (onDone) onDone();
+      };
+      try {
+        window.TankClashAndroid.showInterstitialAd('inter_' + Date.now());
+        return;
+      } catch (e) {
+        pendingInterstitialCb = null;
+      }
+    }
+    showWebTestAdModal('interstitial', 2, () => {
+      if (onDone) onDone();
+    });
+  }
+
+  function requestRewardedAd(rewardType, onRewardEarned) {
+    if (window.TankClashAndroid && typeof window.TankClashAndroid.showRewardedAd === 'function') {
+      pendingRewardedCb = (earned) => {
+        if (earned && onRewardEarned) onRewardEarned();
+      };
+      try {
+        window.TankClashAndroid.showRewardedAd(rewardType || 'supply');
+        return;
+      } catch (e) {
+        pendingRewardedCb = null;
+      }
+    }
+    showWebTestAdModal('rewarded', 3, () => {
+      if (onRewardEarned) onRewardEarned();
+    });
+  }
+
+  function syncRewardSupplyUI() {
+    const armed = Boolean(app.bonusSupplyArmed);
+    const btnSingle = document.getElementById('btn-reward-supply-single');
+    const txtSingle = document.getElementById('reward-supply-status-single');
+    const btnRoom = document.getElementById('btn-reward-supply-room');
+    const txtRoom = document.getElementById('reward-supply-status-room');
+    const btnModal = document.getElementById('btn-modal-reward-retry');
+
+    if (btnSingle) {
+      btnSingle.classList.toggle('supplied', armed);
+      btnSingle.textContent = armed ? '✅ 풀무장 보급 장착됨!' : '📺 광고 보고 보급받기';
+    }
+    if (txtSingle) {
+      txtSingle.textContent = armed
+        ? '보급 완료! 이번 전투에서 고폭탄 3발 · 더블샷 3발 · 수리 2개 · 장갑 +15HP로 출격합니다!'
+        : '광고 시청 시 다음 전투에 고폭탄+1 · 더블샷+1 · 수리키트+1 · 최대HP+15 지급!';
+    }
+    if (btnRoom) {
+      btnRoom.classList.toggle('supplied', armed);
+      btnRoom.textContent = armed ? '✅ 보급 완료' : '📺 광고 보급';
+    }
+    if (txtRoom) {
+      txtRoom.textContent = armed
+        ? '다음 멀티 전투에 풀무장 보급 자동 적용!'
+        : '고폭탄+1 · 더블샷+1 · 수리+1 · HP+15';
+    }
+    if (btnModal) {
+      btnModal.classList.toggle('supplied', armed);
+      btnModal.textContent = armed
+        ? '✅ 풀무장 보급 장착 완료! (고폭탄+1·더블샷+1·수리+1·HP+15)'
+        : '📺 광고 보고 풀무장 보급(+고폭탄·더블샷·수리·HP+15) 장착 후 진행!';
     }
   }
 
@@ -891,13 +1068,18 @@
     const aiSpec = Engine.getAiLevelSpec ? Engine.getAiLevelSpec(app.aiLevel) : { level: app.aiLevel, tierName: 'AI' };
     const playerConfigs = [];
 
+    const useBonusSupply = Boolean(app.bonusSupplyArmed);
+    app.bonusSupplyArmed = false;
+    syncRewardSupplyUI();
+
     if (app.singleSubMode === 'ai') {
       // Player 1 = Human
       playerConfigs.push({
         id: app.myClientId,
         nickname: app.nickname || '명사수',
         isAi: false,
-        tankType: app.myTankType
+        tankType: app.myTankType,
+        bonusSupply: useBonusSupply
       });
 
       const aiTankPool = ['cannon', 'duke', 'multi', 'laser'];
@@ -938,11 +1120,12 @@
 
     const totalP = playerConfigs.length;
     const themeName = (Engine.MAP_THEMES[app.renderMatch.mapType] || {}).name || '랜덤 전장';
+    const supplyTag = useBonusSupply ? ' · 🎁풀무장 보급' : '';
     if (app.renderMatch.isPractice) {
       showToast(`🎯 탱크 클래시 영점 사격 연습! (${themeName}) — 바람과 거리를 계산해 표적을 맞히세요`, 3200);
     } else if (app.singleSubMode === 'ai') {
       showToast(
-        `💣 [LV.${app.aiLevel}/${maxLv} · ${aiSpec.tierName}] ${totalP}인용 탱크 클래시 시작! [지형: ${themeName}]`,
+        `💣 [LV.${app.aiLevel}/${maxLv} · ${aiSpec.tierName}${supplyTag}] ${totalP}인용 탱크 클래시 시작! [지형: ${themeName}]`,
         2900
       );
     } else {
@@ -1603,11 +1786,13 @@
       saveProfile();
     }
 
+    app.completedMatchesCount = (app.completedMatchesCount || 0) + 1;
     openResultModal(outcome, titleText, subText, rankings, customBadgeText, customRematchText);
   }
 
   function openResultModal(outcome, titleText, subText, rankings, customBadgeText, customRematchText) {
     playFanfareSound(outcome);
+    syncRewardSupplyUI();
     const modal = document.getElementById('gameover-modal');
     const badge = document.getElementById('modal-result-badge');
     const title = document.getElementById('modal-result-title');
@@ -4545,6 +4730,38 @@
       });
     });
 
+    const btnRewardSingle = document.getElementById('btn-reward-supply-single');
+    if (btnRewardSingle) {
+      btnRewardSingle.addEventListener('click', () => {
+        playUiClick(600);
+        if (app.bonusSupplyArmed) {
+          alert('이미 다음 전투 풀무장 보급(고폭탄+1 · 더블샷+1 · 수리+1 · HP+15)이 장착되어 있습니다!');
+          return;
+        }
+        requestRewardedAd('single_supply', () => {
+          app.bonusSupplyArmed = true;
+          syncRewardSupplyUI();
+          playFanfareSound('win');
+        });
+      });
+    }
+
+    const btnRewardRoom = document.getElementById('btn-reward-supply-room');
+    if (btnRewardRoom) {
+      btnRewardRoom.addEventListener('click', () => {
+        playUiClick(600);
+        if (app.bonusSupplyArmed) {
+          alert('이미 다음 전투 풀무장 보급이 장착되어 있습니다!');
+          return;
+        }
+        requestRewardedAd('room_supply', () => {
+          app.bonusSupplyArmed = true;
+          syncRewardSupplyUI();
+          playFanfareSound('win');
+        });
+      });
+    }
+
     document.getElementById('btn-start-single').addEventListener('click', () => {
       playUiClick(660);
       app.aiLevel = 1;
@@ -4662,9 +4879,8 @@
     });
 
     // Game Over Modal Buttons
-    document.getElementById('btn-modal-rematch').addEventListener('click', () => {
+    const proceedRematch = () => {
       document.getElementById('gameover-modal').classList.add('hidden');
-      playUiClick(620);
       if (app.mode === 'single') {
         if (app.singleSubMode === 'ai' && app.aiCount > 0) {
           const maxLv = Engine.MAX_AI_LEVEL || 30;
@@ -4677,6 +4893,35 @@
       } else {
         netSend({ type: 'back_to_room' });
         showScreen('room');
+      }
+    };
+
+    const btnModalRewardRetry = document.getElementById('btn-modal-reward-retry');
+    if (btnModalRewardRetry) {
+      btnModalRewardRetry.addEventListener('click', () => {
+        playUiClick(620);
+        if (app.bonusSupplyArmed) {
+          proceedRematch();
+          return;
+        }
+        requestRewardedAd('modal_boost', () => {
+          app.bonusSupplyArmed = true;
+          syncRewardSupplyUI();
+          proceedRematch();
+        });
+      });
+    }
+
+    document.getElementById('btn-modal-rematch').addEventListener('click', () => {
+      document.getElementById('gameover-modal').classList.add('hidden');
+      playUiClick(620);
+      // Show Interstitial Ad every 2 completed matches
+      if (app.completedMatchesCount > 0 && app.completedMatchesCount % 2 === 0) {
+        requestInterstitialAd(() => {
+          proceedRematch();
+        });
+      } else {
+        proceedRematch();
       }
     });
 

@@ -13,7 +13,7 @@
   <link rel="Shortcut Icon" href="favicon.ico" />
   <link rel="apple-touch-icon" href="icon-192.png" />
   <title>탱크 클래시 (Tank Clash) - 1~4인 턴제 대포 게임</title>
-  <link rel="stylesheet" href="style.css?v=11" />
+  <link rel="stylesheet" href="style.css?v=12" />
 </head>
 <body>
   <div class="app-shell">
@@ -91,6 +91,10 @@
             </div>
             <span class="mode-arrow">보기 ▶</span>
           </button>
+        </div>
+
+        <div class="menu-footer-links">
+          <a href="privacy.html" class="privacy-link">🔒 개인정보처리방침 (Privacy Policy)</a>
         </div>
       </div>
     </section>
@@ -198,6 +202,17 @@
           </div>
         </div>
 
+        <!-- Rewarded Ad Bonus Supply -->
+        <div class="setup-block reward-supply-block">
+          <div class="reward-supply-row">
+            <div class="reward-supply-info">
+              <strong>🎁 출격 전 특수포탄 & 장갑 보너스 보급</strong>
+              <span id="reward-supply-status-single">광고 시청 시 다음 전투에 고폭탄+1 · 더블샷+1 · 수리키트+1 · 최대HP+15 지급!</span>
+            </div>
+            <button id="btn-reward-supply-single" class="reward-ad-btn" type="button">📺 광고 보고 보급받기</button>
+          </div>
+        </div>
+
         <button id="btn-start-single" class="primary-cta-btn" type="button">🚀 출격! 게임 시작</button>
       </div>
     </section>
@@ -291,6 +306,13 @@
         </div>
 
         <div class="room-footer-action">
+          <div class="reward-supply-row compact">
+            <div class="reward-supply-info">
+              <strong>🎁 특수포탄 & 장갑 보너스 보급</strong>
+              <span id="reward-supply-status-room">고폭탄+1 · 더블샷+1 · 수리+1 · HP+15</span>
+            </div>
+            <button id="btn-reward-supply-room" class="reward-ad-btn" type="button">📺 광고 보급</button>
+          </div>
           <button id="btn-host-start-match" class="primary-cta-btn" type="button" disabled>
             ⏳ 최소 2명 이상 모이면 시작 가능 (현재 1/4명)
           </button>
@@ -758,6 +780,13 @@
       </div>
     </section>
 
+    <!-- Bottom Banner Ad Bar for Web Preview (Hidden on Native Android where Native AdMob AdView is rendered) -->
+    <div id="web-ad-banner" class="web-ad-banner">
+      <span class="ad-tag">AD</span>
+      <span class="ad-txt">Google AdMob 테스트 배너 (대기실/메뉴 하단 노출 · 전투 중 자동 숨김)</span>
+      <a href="privacy.html" class="ad-privacy-mini">개인정보처리방침</a>
+    </div>
+
   </div>
 
   <!-- ==========================================
@@ -771,9 +800,34 @@
 
       <div id="modal-ranking-list" class="ranking-list"></div>
 
+      <button id="btn-modal-reward-retry" class="reward-ad-btn modal-reward-btn" type="button">
+        📺 광고 보고 풀무장 보급(+고폭탄·더블샷·수리·HP+15) 장착 후 진행!
+      </button>
+
       <div class="modal-actions">
         <button id="btn-modal-rematch" class="modal-btn primary" type="button">🔄 새 맵에서 다시하기</button>
         <button id="btn-modal-exit" class="modal-btn secondary" type="button">🚪 나가기</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==========================================
+       ADMOB TEST AD OVERLAY (Web Preview & Offline Fallback)
+       ========================================== -->
+  <div id="test-ad-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true">
+    <div class="modal-card test-ad-card">
+      <div class="test-ad-top">
+        <span id="test-ad-badge" class="result-badge win">AdMob Test Ad</span>
+        <span id="test-ad-timer" class="test-ad-timer">3초 남음</span>
+      </div>
+      <h2 id="test-ad-title" class="modal-title">📺 Google AdMob 테스트 광고</h2>
+      <p id="test-ad-desc" class="modal-sub">실제 출시 시 Google AdMob의 전면/보상형 광고가 이 위치에 표시됩니다.</p>
+      <div class="test-ad-unit-box">
+        <div><strong>모드:</strong> <span id="test-ad-kind-label">보상형 동영상 광고 (Rewarded Ad)</span></div>
+        <div><strong>테스트 ID:</strong> <code id="test-ad-unit-id">ca-app-pub-3940256099942544/5224354917</code></div>
+      </div>
+      <div class="modal-actions">
+        <button id="btn-test-ad-close" class="modal-btn primary" type="button" disabled>⏳ 광고 시청 중... (3s)</button>
       </div>
     </div>
   </div>
@@ -795,7 +849,7 @@
     </div>
   </div>
 
-  <script src="engine.js?v=11"></script>
-  <script src="game.js?v=11"></script>
+  <script src="engine.js?v=12"></script>
+  <script src="game.js?v=12"></script>
 </body>
 </html>

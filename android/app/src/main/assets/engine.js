@@ -493,9 +493,16 @@
       const facing = spawnX > WORLD_WIDTH * 0.5 ? -1 : 1;
 
       const isAiPlayer = Boolean(cfg.isAi);
+      const hasBonusSupply = !isAiPlayer && Boolean(cfg.bonusSupply);
       const scaledMaxHp = isAiPlayer
         ? Math.max(60, Math.round((tankSpec.maxHp * aiSpec.hpScale) / 5) * 5)
-        : tankSpec.maxHp;
+        : tankSpec.maxHp + (hasBonusSupply ? 15 : 0);
+      const initAmmo = createInitialAmmo();
+      if (hasBonusSupply) {
+        initAmmo.power += 1;
+        initAmmo.double += 1;
+        initAmmo.heal += 1;
+      }
 
       return {
         id: String(cfg.id || `p_${idx + 1}`),
@@ -521,7 +528,7 @@
         maxFuel: tankSpec.maxFuel,
         alive: true,
         selectedWeapon: 'normal',
-        ammo: createInitialAmmo(),
+        ammo: initAmmo,
         damageDealt: 0,
         kills: 0,
         deathOrder: 0,

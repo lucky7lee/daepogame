@@ -43,7 +43,7 @@ jobs:
       - name: 5. Sync Latest Web Game Assets into Android Project
         run: |
           mkdir -p android/app/src/main/assets
-          cp index.html style.css engine.js game.js manifest.json sw.js icon-192.png icon-512.png icon.svg favicon.ico android/app/src/main/assets/
+          cp index.html privacy.html style.css engine.js game.js manifest.json sw.js icon-192.png icon-512.png icon.svg favicon.ico android/app/src/main/assets/
 
       - name: 6. Prepare Persistent Release Signing Keystore
         env:
