@@ -4586,7 +4586,7 @@
     renderHeaderStats();
     showScreen('menu');
 
-    // Sound & Stat Reset
+    // Sound Toggle
     const toggleSound = () => {
       app.soundEnabled = !app.soundEnabled;
       saveProfile();
@@ -4598,15 +4598,6 @@
     };
     document.getElementById('btn-sound-toggle').addEventListener('click', toggleSound);
     document.getElementById('btn-battle-sound').addEventListener('click', toggleSound);
-
-    document.getElementById('btn-reset-stats').addEventListener('click', () => {
-      if (!confirm('승/패 전적을 초기화할까요?')) return;
-      app.stats = { wins: 0, losses: 0, draws: 0 };
-      saveProfile();
-      if (transportMode === 'server') {
-        netSend({ type: 'set_profile', nickname: app.nickname, tankType: app.myTankType, stats: app.stats });
-      }
-    });
 
     // Nickname live clear error
     nickInput.addEventListener('input', () => {
