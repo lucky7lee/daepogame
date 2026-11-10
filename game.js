@@ -853,6 +853,12 @@
       aiLevel: exported.aiLevel || app.aiLevel || 1,
       terrain: new Float32Array(exported.terrain),
       wind: exported.wind,
+      windRoundsLeft:
+        typeof exported.windRoundsLeft === 'number'
+          ? exported.windRoundsLeft
+          : Engine.WIND_CHANGE_ROUNDS || 3,
+      windChanged: Boolean(exported.windChanged),
+      roundNumber: exported.roundNumber || 1,
       turnIndex: exported.turnIndex,
       turnNumber: exported.turnNumber,
       isPractice: Boolean(exported.isPractice),
@@ -1504,6 +1510,9 @@
       app.renderMatch.players = JSON.parse(JSON.stringify(result.playersSnapshot));
     }
     if (typeof result.wind === 'number') app.renderMatch.wind = result.wind;
+    if (typeof result.windRoundsLeft === 'number') app.renderMatch.windRoundsLeft = result.windRoundsLeft;
+    if (typeof result.roundNumber === 'number') app.renderMatch.roundNumber = result.roundNumber;
+    if ('windChanged' in result) app.renderMatch.windChanged = Boolean(result.windChanged);
     if (typeof result.turnIndex === 'number') app.renderMatch.turnIndex = result.turnIndex;
     if (typeof result.turnNumber === 'number') app.renderMatch.turnNumber = result.turnNumber;
     if (result.status) app.renderMatch.status = result.status;
@@ -1689,6 +1698,7 @@
     const leftBar = document.getElementById('wind-fill-left');
     const rightBar = document.getElementById('wind-fill-right');
     const valTxt = document.getElementById('wind-value-text');
+    const windBox = document.querySelector('.wind-box');
     const pct = Math.min(100, Math.round((Math.abs(w) / Engine.MAX_WIND) * 100));
 
     if (leftBar) leftBar.style.width = w < 0 ? `${pct}%` : '0%';
@@ -1697,6 +1707,13 @@
       if (w === 0) valTxt.textContent = '무풍 0';
       else if (w < 0) valTxt.textContent = `◀ ${Math.abs(w)}`;
       else valTxt.textContent = `${w} ▶`;
+    }
+    if (windBox) {
+      const roundsLeft =
+        typeof app.renderMatch.windRoundsLeft === 'number'
+          ? app.renderMatch.windRoundsLeft
+          : Engine.WIND_CHANGE_ROUNDS || 3;
+      windBox.title = `현재 풍향 및 풍속 (참가 탱크 모두 3턴마다 변경 · 바람 변경까지 ${roundsLeft}라운드 남음)`;
     }
   }
 
@@ -3904,6 +3921,9 @@
 
       case 'turn_skipped':
         if (app.renderMatch) {
+          if (typeof msg.wind === 'number') app.renderMatch.wind = msg.wind;
+          if (typeof msg.windRoundsLeft === 'number') app.renderMatch.windRoundsLeft = msg.windRoundsLeft;
+          if (typeof msg.roundNumber === 'number') app.renderMatch.roundNumber = msg.roundNumber;
           app.renderMatch.turnIndex = msg.turnIndex;
           app.renderMatch.turnNumber = msg.turnNumber;
           if (msg.playersSnapshot) app.renderMatch.players = msg.playersSnapshot;

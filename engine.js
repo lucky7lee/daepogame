@@ -23,6 +23,7 @@
   const BARREL_LENGTH = 28;
   const TURN_FUEL_DEFAULT = 120;
   const MAX_AI_LEVEL = 30;
+  const WIND_CHANGE_ROUNDS = 3; // 모든 참가 탱크가 3턴(3라운드) 진행할 때마다 바람 변경
 
   function getAiLevelSpec(rawLevel) {
     const level = clamp(Math.round(Number(rawLevel) || 1), 1, MAX_AI_LEVEL);
@@ -566,6 +567,9 @@
       wind,
       turnIndex: 0,
       turnNumber: 1,
+      roundNumber: 1,
+      windRoundsLeft: WIND_CHANGE_ROUNDS,
+      windChanged: false,
       isPractice: count === 1,
       practiceScore: 0,
       practiceTargets,
@@ -843,6 +847,7 @@
       return;
     }
 
+    const prevIdx = match.turnIndex;
     const total = match.players.length;
     let nextIdx = match.turnIndex;
     for (let i = 1; i <= total; i++) {
@@ -862,10 +867,22 @@
       nextPlayer.fuel = nextPlayer.maxFuel;
     }
 
-    // Update wind
-    const rngVal = stepMatchRng(match);
-    const localRng = mulberry32(Math.floor(rngVal * 2147483640) + match.turnNumber * 31);
-    match.wind = nextWind(localRng, match.wind);
+    // Update wind only after all participating alive tanks complete 3 turns (3 full rounds)
+    let windChanged = false;
+    if (nextIdx <= prevIdx) {
+      match.roundNumber = (match.roundNumber || 1) + 1;
+      const curLeft =
+        typeof match.windRoundsLeft === 'number' ? match.windRoundsLeft : WIND_CHANGE_ROUNDS;
+      match.windRoundsLeft = curLeft - 1;
+      if (match.windRoundsLeft <= 0) {
+        const rngVal = stepMatchRng(match);
+        const localRng = mulberry32(Math.floor(rngVal * 2147483640) + match.turnNumber * 31);
+        match.wind = nextWind(localRng, match.wind);
+        match.windRoundsLeft = WIND_CHANGE_ROUNDS;
+        windChanged = true;
+      }
+    }
+    match.windChanged = windChanged;
   }
 
   // Execute active player's turn action (fire weapon or use heal)
@@ -920,6 +937,9 @@
         damages: [],
         practiceHits: [],
         wind: match.wind,
+        windRoundsLeft: match.windRoundsLeft,
+        windChanged: Boolean(match.windChanged),
+        roundNumber: match.roundNumber,
         turnIndex: match.turnIndex,
         turnNumber: match.turnNumber,
         status: match.status,
@@ -1065,6 +1085,9 @@
       damages: allDamageEvents,
       practiceHits,
       wind: match.wind,
+      windRoundsLeft: match.windRoundsLeft,
+      windChanged: Boolean(match.windChanged),
+      roundNumber: match.roundNumber,
       turnIndex: match.turnIndex,
       turnNumber: match.turnNumber,
       status: match.status,
@@ -1407,6 +1430,10 @@
       aiLevel: match.aiLevel || 1,
       terrain: Array.from(match.terrain, (v) => Math.round(v * 10) / 10),
       wind: match.wind,
+      windRoundsLeft:
+        typeof match.windRoundsLeft === 'number' ? match.windRoundsLeft : WIND_CHANGE_ROUNDS,
+      windChanged: Boolean(match.windChanged),
+      roundNumber: match.roundNumber || 1,
       turnIndex: match.turnIndex,
       turnNumber: match.turnNumber,
       isPractice: match.isPractice,
@@ -1430,6 +1457,7 @@
     BARREL_LENGTH,
     TURN_FUEL_DEFAULT,
     MAX_AI_LEVEL,
+    WIND_CHANGE_ROUNDS,
     PLAYER_PALETTE,
     TANK_TYPES,
     WEAPONS,
@@ -1447,6 +1475,7 @@
     carveCrater,
     settleTanks,
     traceProjectile,
+    advanceTurnAndCheckWinner,
     executeTurnAction,
     computeAiTurn,
     serializePlayers,

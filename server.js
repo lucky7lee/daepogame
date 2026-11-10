@@ -717,24 +717,12 @@ function handleClientMessage(client, msg) {
             damages: [{ playerId: active.id, damage: 999, killed: true, sank: true, x: active.x, y: active.y }],
             practiceHits: []
           };
-          // Advance turn inside engine by checking alive players
-          const aliveNow = room.match.players.filter((p) => p.alive);
-          if (aliveNow.length <= 1) {
-            room.match.status = 'finished';
-            room.match.winnerId = aliveNow.length === 1 ? aliveNow[0].id : null;
-          } else {
-            const total = room.match.players.length;
-            for (let i = 1; i <= total; i++) {
-              const cand = (room.match.turnIndex + i) % total;
-              if (room.match.players[cand].alive) {
-                room.match.turnIndex = cand;
-                room.match.players[cand].fuel = room.match.players[cand].maxFuel;
-                break;
-              }
-            }
-            room.match.turnNumber += 1;
-          }
+          // Advance turn & 3-round wind cycle inside engine
+          DaepoEngine.advanceTurnAndCheckWinner(room.match);
           res.wind = room.match.wind;
+          res.windRoundsLeft = room.match.windRoundsLeft;
+          res.windChanged = Boolean(room.match.windChanged);
+          res.roundNumber = room.match.roundNumber;
           res.turnIndex = room.match.turnIndex;
           res.turnNumber = room.match.turnNumber;
           res.status = room.match.status;
@@ -854,19 +842,14 @@ function leaveCurrentRoom(client) {
       match.winnerId = alivePlayers.length === 1 ? alivePlayers[0].id : null;
       finalizeMultiplayerMatch(room);
     } else if (match.turnIndex === pIdx) {
-      // It was the disconnected player's turn -> advance turn immediately!
-      const total = match.players.length;
-      for (let i = 1; i <= total; i++) {
-        const cand = (match.turnIndex + i) % total;
-        if (match.players[cand].alive) {
-          match.turnIndex = cand;
-          match.players[cand].fuel = match.players[cand].maxFuel;
-          break;
-        }
-      }
-      match.turnNumber += 1;
+      // It was the disconnected player's turn -> advance turn & 3-round wind cycle immediately!
+      DaepoEngine.advanceTurnAndCheckWinner(match);
       broadcastToRoom(room, {
         type: 'turn_skipped',
+        wind: match.wind,
+        windRoundsLeft: match.windRoundsLeft,
+        windChanged: Boolean(match.windChanged),
+        roundNumber: match.roundNumber,
         turnIndex: match.turnIndex,
         turnNumber: match.turnNumber,
         playersSnapshot: DaepoEngine.serializePlayers(match.players)
