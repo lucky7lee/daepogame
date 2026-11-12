@@ -7,12 +7,12 @@ def verName = project.hasProperty('versionName') ? project.property('versionName
 
 android {
     namespace 'io.github.lucky7lee.tankclash'
-    compileSdk 35
+    compileSdk 36
 
     defaultConfig {
         applicationId "io.github.lucky7lee.tankclash"
         minSdk 24
-        targetSdk 35
+        targetSdk 36
         versionCode verCode
         versionName verName
     }

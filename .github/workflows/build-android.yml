@@ -34,10 +34,11 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: 4. Accept Android SDK Licenses
+      - name: 4. Accept Android SDK Licenses & Prepare SDK 36
         run: |
           if [ -n "$ANDROID_HOME" ] && [ -x "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" ]; then
             yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null 2>&1 || true
+            "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;36.0.0" > /dev/null 2>&1 || true
           fi
 
       - name: 5. Sync Latest Web Game Assets into Android Project
@@ -107,7 +108,7 @@ jobs:
             * **`TankClash-release.apk`**: 스마트폰이나 태블릿에서 다운로드하여 바로 설치 및 실행할 수 있는 설치 파일입니다. (오프라인 싱글 플레이 내장 + GitHub 서버리스 2~4인 온라인 멀티플레이 연동)
 
             ### 🏪 Google Play 스토어 등록용 파일
-            * **`TankClash-playstore.aab`**: Google Play Console에 앱 등록 시 업로드하는 정식 Android App Bundle 파일입니다 (`targetSdk 35`, 정식 릴리스 서명 적용).
+            * **`TankClash-playstore.aab`**: Google Play Console에 앱 등록 시 업로드하는 정식 Android App Bundle 파일입니다 (`targetSdk 36`, 정식 릴리스 서명 적용).
             * **`playstore-icon-512.png`**: Google Play 스토어 등록용 512x512 고해상도 아이콘입니다.
             * **`playstore-feature-graphic.png`**: Google Play 스토어 등록용 1024x500 그래픽 이미지입니다.
             * **개인정보처리방침 URL**: `https://lucky7lee.github.io/daepogame/privacy.html`
