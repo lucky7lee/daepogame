@@ -1,12 +1,12 @@
 // Service Worker for TANK CLASH (탱크 클래시) PWA Installation
-const CACHE_NAME = 'tank-clash-v14';
+const CACHE_NAME = 'tank-clash-v15';
 const ASSETS = [
   './',
   './index.html',
   './privacy.html',
-  './style.css?v=14',
-  './engine.js?v=14',
-  './game.js?v=14',
+  './style.css?v=15',
+  './engine.js?v=15',
+  './game.js?v=15',
   './manifest.json',
   './icon-192.png',
   './icon-512.png',

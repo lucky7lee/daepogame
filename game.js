@@ -8,7 +8,8 @@
   'use strict';
 
   const Engine = window.DaepoEngine;
-  const TURN_LIMIT_SEC = 35;
+  const TURN_LIMIT_SEC = 30;
+  const REMATCH_LIMIT_SEC = 30;
   const STORAGE_KEY = 'daepo_fortress_save_v1';
 
   // ==========================================
@@ -31,6 +32,18 @@
     stats: { wins: 0, losses: 0, draws: 0 },
     bonusSupplyArmed: false,
     completedMatchesCount: 0,
+    pendingAbnormalLoss: false,
+    hadAbnormalLossOnBoot: false,
+    matchLossRecorded: false,
+
+    // Turn Countdown & Post-Game Rematch State
+    turnCountdownActive: false,
+    turnDeadlineMs: 0,
+    lastTickSecondBeep: -1,
+    rematchVoted: false,
+    rematchVotedCount: 0,
+    rematchTotalPlayers: 2,
+    rematchDeadlineMs: 0,
 
     // Multiplayer Room State
     currentRoom: null,
@@ -64,7 +77,9 @@
 
   let turnTimerInterval = null;
   let turnSecondsLeft = TURN_LIMIT_SEC;
+  let rematchTimerInterval = null;
   let toastTimeoutId = null;
+  let globalToastTimeoutId = null;
   let aiActionTimerId = null;
   let lastAimSyncAt = 0;
 
@@ -600,7 +615,7 @@
   }
 
   // ==========================================
-  // Local Storage Persistence
+  // Local Storage Persistence & Abnormal Exit Loss Guard
   // ==========================================
   function loadSavedProfile() {
     try {
@@ -621,6 +636,13 @@
       if (typeof parsed.soundEnabled === 'boolean') {
         app.soundEnabled = parsed.soundEnabled;
       }
+      // If previous game was force-closed or abnormally terminated mid-match, add +1 loss unconditionally
+      if (parsed.pendingAbnormalLoss === true) {
+        app.stats.losses += 1;
+        app.pendingAbnormalLoss = false;
+        app.hadAbnormalLossOnBoot = true;
+        saveProfile();
+      }
     } catch (e) {}
   }
 
@@ -632,11 +654,38 @@
           nickname: app.nickname,
           myTankType: app.myTankType,
           stats: app.stats,
-          soundEnabled: app.soundEnabled
+          soundEnabled: app.soundEnabled,
+          pendingAbnormalLoss: Boolean(app.pendingAbnormalLoss)
         })
       );
     } catch (e) {}
     renderHeaderStats();
+  }
+
+  function setActiveMatchLossGuard(active) {
+    app.pendingAbnormalLoss = Boolean(active);
+    app.matchLossRecorded = !active;
+    saveProfile();
+  }
+
+  function penalizeMidGameExit() {
+    if (
+      app.renderMatch &&
+      app.renderMatch.status === 'playing' &&
+      !app.renderMatch.isPractice &&
+      !app.matchLossRecorded
+    ) {
+      app.matchLossRecorded = true;
+      app.pendingAbnormalLoss = false;
+      app.stats.losses += 1;
+      saveProfile();
+      return true;
+    }
+    if (app.pendingAbnormalLoss) {
+      app.pendingAbnormalLoss = false;
+      saveProfile();
+    }
+    return false;
   }
 
   function renderHeaderStats() {
@@ -860,6 +909,17 @@
     el.textContent = text;
     el.classList.remove('hidden');
     toastTimeoutId = setTimeout(() => {
+      el.classList.add('hidden');
+    }, durationMs);
+  }
+
+  function showGlobalToast(text, durationMs = 3400) {
+    const el = document.getElementById('global-toast');
+    if (!el) return;
+    if (globalToastTimeoutId) clearTimeout(globalToastTimeoutId);
+    el.textContent = text;
+    el.classList.remove('hidden');
+    globalToastTimeoutId = setTimeout(() => {
       el.classList.add('hidden');
     }, durationMs);
   }
@@ -1108,6 +1168,11 @@
     });
 
     hydrateRenderMatchFromExport(Engine.exportMatchState(app.localEngineMatch));
+    if (!app.renderMatch.isPractice) {
+      setActiveMatchLossGuard(true);
+    } else {
+      setActiveMatchLossGuard(false);
+    }
     showScreen('game');
     resizeBattleCanvas();
     focusActiveTank(true);
@@ -1138,6 +1203,7 @@
   }
 
   function clearTurnCountdown() {
+    app.turnCountdownActive = false;
     if (turnTimerInterval) {
       clearInterval(turnTimerInterval);
       turnTimerInterval = null;
@@ -1155,38 +1221,24 @@
     focusActiveTank(false);
     syncAllBattleHud();
 
-    // Start 35s turn timer (skip countdown in 1P practice mode)
+    // Start 30s turn timer (skip countdown in 1P practice mode)
     const timerBadge = document.getElementById('turn-timer');
+    const cdWrap = document.getElementById('turn-countdown-wrap');
     if (app.renderMatch.isPractice) {
       if (timerBadge) {
         timerBadge.textContent = `점수 ${app.renderMatch.practiceScore}`;
         timerBadge.classList.remove('urgent');
       }
+      if (cdWrap) cdWrap.classList.add('hidden');
       return;
     }
 
+    if (cdWrap) cdWrap.classList.remove('hidden');
     turnSecondsLeft = TURN_LIMIT_SEC;
-    renderTimerBadge();
-
-    turnTimerInterval = setInterval(() => {
-      if (app.screen !== 'game' || !app.renderMatch || app.renderMatch.status !== 'playing' || app.isAnimatingTurn) {
-        return;
-      }
-      turnSecondsLeft = Math.max(0, turnSecondsLeft - 1);
-      renderTimerBadge();
-
-      if (turnSecondsLeft <= 5 && turnSecondsLeft > 0 && isMyControllableTurn()) {
-        playUiClick(740);
-      }
-
-      if (turnSecondsLeft <= 0) {
-        clearTurnCountdown();
-        if (app.mode === 'single' && isMyControllableTurn()) {
-          showToast('⏰ 제한시간 초과! 자동 발사합니다.');
-          triggerPlayerFire();
-        }
-      }
-    }, 1000);
+    app.turnCountdownActive = true;
+    app.turnDeadlineMs = performance.now() + TURN_LIMIT_SEC * 1000;
+    app.lastTickSecondBeep = -1;
+    updateTurnCountdownVisual(TURN_LIMIT_SEC);
 
     // If Single Player & Active Player is AI -> run AI Zeroing-In sequence!
     if (app.mode === 'single' && active.isAi) {
@@ -1196,11 +1248,45 @@
     }
   }
 
-  function renderTimerBadge() {
+  function updateTurnCountdownVisual(remSecFloat) {
+    const remClamped = Math.max(0, Math.min(TURN_LIMIT_SEC, remSecFloat));
+    const secCeil = Math.ceil(remClamped);
+    turnSecondsLeft = secCeil;
+
     const timerBadge = document.getElementById('turn-timer');
-    if (!timerBadge) return;
-    timerBadge.textContent = `${turnSecondsLeft}s`;
-    timerBadge.classList.toggle('urgent', turnSecondsLeft <= 5);
+    if (timerBadge) {
+      timerBadge.textContent = `${secCeil}s`;
+      timerBadge.classList.toggle('urgent', secCeil <= 5);
+    }
+
+    const wrap = document.getElementById('turn-countdown-wrap');
+    const fill = document.getElementById('turn-cd-fill');
+    const spark = document.getElementById('turn-cd-spark');
+    const timeEl = document.getElementById('turn-cd-time');
+    const labelEl = document.getElementById('turn-cd-label');
+
+    const pct = (remClamped / TURN_LIMIT_SEC) * 100;
+    if (fill) fill.style.width = `${pct.toFixed(2)}%`;
+    if (spark) spark.style.left = `${pct.toFixed(2)}%`;
+    if (timeEl) timeEl.textContent = `${remClamped.toFixed(1)}s`;
+
+    if (wrap) {
+      wrap.classList.toggle('warn', remClamped <= 10 && remClamped > 5);
+      wrap.classList.toggle('urgent', remClamped <= 5);
+    }
+    if (labelEl) {
+      const myTurn = isMyControllableTurn();
+      if (myTurn) {
+        labelEl.textContent =
+          remClamped <= 5 ? '🚨 자동발사 임박!' : '발사 제한시간 (30초)';
+      } else {
+        labelEl.textContent = '상대 턴 제한시간';
+      }
+    }
+  }
+
+  function renderTimerBadge() {
+    updateTurnCountdownVisual(turnSecondsLeft);
   }
 
   // Animate AI moving, calculating zeroing adjustment, aiming barrel, and firing!
@@ -1387,7 +1473,7 @@
     });
   }
 
-  function triggerPlayerFire() {
+  function triggerPlayerFire(isAutoTimeout = false) {
     if (!isMyControllableTurn()) return;
     const active = getActivePlayer();
     if (!active) return;
@@ -1395,11 +1481,30 @@
     app.spaceCharging = false;
     clearTurnCountdown();
 
+    let fireAngle = active.angle;
+    let firePower = active.power;
+    let fireWeapon = active.selectedWeapon || 'normal';
+
+    if (isAutoTimeout) {
+      const spec = Engine.TANK_TYPES[active.tankType] || Engine.TANK_TYPES.cannon;
+      fireAngle = Engine.clamp(
+        Math.round(active.angle + (Math.random() * 18 - 9)),
+        spec.minAngle,
+        spec.maxAngle
+      );
+      firePower = Engine.clamp(Math.round(32 + Math.random() * 54), 15, 95);
+      fireWeapon = 'normal';
+      active.angle = fireAngle;
+      active.power = firePower;
+      active.selectedWeapon = 'normal';
+      syncControlDeckUI();
+    }
+
     const payload = {
       facing: active.facing,
-      angle: active.angle,
-      power: active.power,
-      weapon: active.selectedWeapon || 'normal'
+      angle: fireAngle,
+      power: firePower,
+      weapon: fireWeapon
     };
 
     if (app.mode === 'single') {
@@ -1707,9 +1812,59 @@
   // ==========================================
   // Match Completion & Result Modal
   // ==========================================
+  function clearPostGameRematchCountdown() {
+    if (rematchTimerInterval) {
+      clearInterval(rematchTimerInterval);
+      rematchTimerInterval = null;
+    }
+  }
+
+  function updateRematchVoteUI() {
+    const voteTxt = document.getElementById('modal-rematch-vote-text');
+    if (voteTxt) {
+      voteTxt.textContent = `⚔️ 재대결 동의: ${app.rematchVotedCount} / ${app.rematchTotalPlayers}명`;
+    }
+  }
+
+  function startPostGameRematchCountdown(totalPlayers, timeoutSec = REMATCH_LIMIT_SEC) {
+    clearPostGameRematchCountdown();
+    app.rematchVoted = false;
+    app.rematchVotedCount = 0;
+    app.rematchTotalPlayers = Math.max(2, Number(totalPlayers) || 2);
+    const durSec = Number(timeoutSec) || REMATCH_LIMIT_SEC;
+    app.rematchDeadlineMs = performance.now() + durSec * 1000;
+
+    updateRematchVoteUI();
+    const timerTxt = document.getElementById('modal-rematch-timer-text');
+    const timerFill = document.getElementById('modal-rematch-timer-fill');
+    if (timerTxt) timerTxt.textContent = `⏱️ ${durSec}초 남음`;
+    if (timerFill) timerFill.style.width = '100%';
+
+    rematchTimerInterval = setInterval(() => {
+      const remMs = Math.max(0, app.rematchDeadlineMs - performance.now());
+      const remSec = Math.ceil(remMs / 1000);
+      const pct = Math.max(0, Math.min(100, (remMs / (durSec * 1000)) * 100));
+      if (timerTxt) timerTxt.textContent = `⏱️ ${remSec}초 남음`;
+      if (timerFill) timerFill.style.width = `${pct.toFixed(1)}%`;
+
+      if (remMs <= 0) {
+        clearPostGameRematchCountdown();
+        const modal = document.getElementById('gameover-modal');
+        if (app.mode === 'multi' && modal && !modal.classList.contains('hidden')) {
+          modal.classList.add('hidden');
+          netSend({ type: 'post_game_exit', target: 'lobby' });
+          showScreen('lobby');
+          netSend({ type: 'get_rooms' });
+          showGlobalToast('⏰ 30초 안에 재대결이 선택되지 않아 대기실로 이동했습니다.');
+        }
+      }
+    }, 200);
+  }
+
   function handleSingleMatchFinished() {
     clearTurnCountdown();
     clearAiTimer();
+    setActiveMatchLossGuard(false);
     if (!app.localEngineMatch) return;
 
     const match = app.localEngineMatch;
@@ -1785,7 +1940,15 @@
     openResultModal(outcome, titleText, subText, rankings, customBadgeText, customRematchText);
   }
 
-  function openResultModal(outcome, titleText, subText, rankings, customBadgeText, customRematchText) {
+  function openResultModal(
+    outcome,
+    titleText,
+    subText,
+    rankings,
+    customBadgeText,
+    customRematchText,
+    multiMeta = null
+  ) {
     playFanfareSound(outcome);
     syncRewardSupplyUI();
     const modal = document.getElementById('gameover-modal');
@@ -1793,7 +1956,10 @@
     const title = document.getElementById('modal-result-title');
     const sub = document.getElementById('modal-result-sub');
     const list = document.getElementById('modal-ranking-list');
+    const rematchBox = document.getElementById('modal-rematch-box');
+    const actionsRow = document.getElementById('modal-actions-row');
     const rematchBtn = document.getElementById('btn-modal-rematch');
+    const lobbyBtn = document.getElementById('btn-modal-lobby');
     const exitBtn = document.getElementById('btn-modal-exit');
 
     badge.className = `result-badge ${outcome}`;
@@ -1802,15 +1968,40 @@
     title.textContent = titleText;
     sub.textContent = subText;
 
+    const isMulti = app.mode === 'multi';
+    if (rematchBox) rematchBox.classList.toggle('hidden', !isMulti);
+    if (lobbyBtn) lobbyBtn.classList.toggle('hidden', !isMulti);
+    if (actionsRow) actionsRow.classList.toggle('multi-three', isMulti);
+
     if (rematchBtn) {
-      if (customRematchText) {
+      rematchBtn.disabled = false;
+      if (isMulti) {
+        rematchBtn.textContent = '🔄 재대결';
+      } else if (customRematchText) {
         rematchBtn.textContent = customRematchText;
       } else {
-        rematchBtn.textContent = app.mode === 'multi' ? '🔄 대기방으로 (재경기)' : '🔄 새 맵에서 다시하기';
+        rematchBtn.textContent = '🔄 새 맵에서 다시하기';
       }
     }
+    if (lobbyBtn) {
+      lobbyBtn.disabled = false;
+      lobbyBtn.textContent = '🌐 대기실로';
+    }
     if (exitBtn) {
-      exitBtn.textContent = '🚪 게임 나가기';
+      exitBtn.disabled = false;
+      exitBtn.textContent = isMulti ? '🏠 메인 화면' : '🚪 게임 나가기';
+    }
+
+    if (isMulti) {
+      const pCount =
+        (multiMeta && multiMeta.roomPlayerCount) ||
+        (app.currentRoom && app.currentRoom.players && app.currentRoom.players.length) ||
+        (rankings && rankings.length) ||
+        2;
+      const tSec = (multiMeta && multiMeta.rematchTimeoutSec) || REMATCH_LIMIT_SEC;
+      startPostGameRematchCountdown(pCount, tSec);
+    } else {
+      clearPostGameRematchCountdown();
     }
 
     list.innerHTML = '';
@@ -2091,6 +2282,33 @@
   }
 
   function updateSimulationVisuals(dt) {
+    // 30-Second Visual Turn Countdown Animation & Auto-Fire Trigger
+    if (
+      app.turnCountdownActive &&
+      app.screen === 'game' &&
+      app.renderMatch &&
+      app.renderMatch.status === 'playing' &&
+      !app.isAnimatingTurn &&
+      !app.renderMatch.isPractice
+    ) {
+      const remSec = Math.max(0, (app.turnDeadlineMs - performance.now()) / 1000);
+      updateTurnCountdownVisual(remSec);
+
+      const secInt = Math.ceil(remSec);
+      if (secInt <= 5 && secInt > 0 && secInt !== app.lastTickSecondBeep && isMyControllableTurn()) {
+        app.lastTickSecondBeep = secInt;
+        playUiClick(760);
+      }
+
+      if (remSec <= 0) {
+        clearTurnCountdown();
+        if (isMyControllableTurn()) {
+          showToast('⏰ 30초 제한시간 초과! 임의로 자동 발사합니다.');
+          triggerPlayerFire(true);
+        }
+      }
+    }
+
     // Spacebar Hold-to-Charge sweep
     if (app.spaceCharging && isMyControllableTurn()) {
       const active = getActivePlayer();
@@ -3676,6 +3894,467 @@
   }
 
   // Serverless 2~4P Host-Authoritative Relay Handler
+  let serverlessWatchdogTimer = null;
+  let lastHostSeenAt = Date.now();
+
+  function startServerlessWatchdog() {
+    if (serverlessWatchdogTimer) return;
+    serverlessWatchdogTimer = setInterval(() => {
+      if (transportMode !== 'serverless') return;
+      const now = Date.now();
+
+      if (hostedServerlessRoom) {
+        const r = hostedServerlessRoom;
+        for (const p of [...r.players]) {
+          if (p.id === app.myClientId) continue;
+          sendToServerlessPeer(p.id, { type: 'host_heartbeat' });
+          if (now - (p.lastSeenAt || now) > 9500) {
+            handleServerlessPlayerLeave(r, p.id);
+          }
+        }
+      } else if (joinedHostPeerId && joinedHostPeerId !== app.myClientId) {
+        mqttPub(TOPIC_PEER_PREFIX + joinedHostPeerId, {
+          kind: 'cmd',
+          fromId: app.myClientId,
+          payload: { type: 'peer_heartbeat' }
+        });
+        const modalOpen = !document.getElementById('gameover-modal').classList.contains('hidden');
+        if ((app.screen === 'game' || modalOpen) && now - lastHostSeenAt > 9500) {
+          handleServerlessHostDisconnected();
+        }
+      }
+    }, 3000);
+  }
+
+  function clearServerlessRoomTimers(r) {
+    if (!r) return;
+    if (r.turnTimer) {
+      clearTimeout(r.turnTimer);
+      r.turnTimer = null;
+    }
+    if (r.rematchTimer) {
+      clearTimeout(r.rematchTimer);
+      r.rematchTimer = null;
+    }
+  }
+
+  function scheduleServerlessTurnTimer(r, extraDelayMs = 0) {
+    if (!r) return;
+    if (r.turnTimer) {
+      clearTimeout(r.turnTimer);
+      r.turnTimer = null;
+    }
+    if (r.status !== 'playing' || !r.match || r.match.status !== 'playing') return;
+
+    const waitMs = TURN_LIMIT_SEC * 1000 + 600 + Math.max(0, extraDelayMs);
+    r.turnTimer = setTimeout(() => {
+      if (hostedServerlessRoom !== r || r.status !== 'playing' || !r.match) return;
+      const active = r.match.players[r.match.turnIndex];
+      if (!active || !active.alive) return;
+      const spec = Engine.TANK_TYPES[active.tankType] || Engine.TANK_TYPES.cannon;
+      const randAng = Engine.clamp(
+        Math.round(active.angle + (Math.random() * 16 - 8)),
+        spec.minAngle,
+        spec.maxAngle
+      );
+      const randPow = Engine.clamp(Math.round(35 + Math.random() * 50), 15, 95);
+      const res = Engine.executeTurnAction(r.match, {
+        facing: active.facing,
+        angle: randAng,
+        power: randPow,
+        weapon: 'normal',
+        aiNote: '⏰ 30초 제한시간 초과 자동 발사!'
+      });
+      if (res) {
+        resolveServerlessTurnResult(r, res);
+      }
+    }, waitMs);
+  }
+
+  function startServerlessRoomMatch(r) {
+    if (!r || r.players.length < 2) return;
+    clearServerlessRoomTimers(r);
+    r.rematchVotes = new Set();
+
+    r.match = Engine.createMatch({
+      mapType: r.mapType,
+      players: r.players.map((p, idx) => {
+        const useBonus = Boolean(p.bonusSupply);
+        p.bonusSupply = false;
+        return {
+          id: p.id,
+          nickname: p.nickname,
+          isAi: false,
+          tankType: p.tankType || 'cannon',
+          bonusSupply: useBonus,
+          slotIndex: idx
+        };
+      })
+    });
+    r.status = 'playing';
+
+    const exported = Engine.exportMatchState(r.match);
+    for (const p of r.players) {
+      sendToServerlessPeer(p.id, {
+        type: 'match_started',
+        myId: p.id,
+        roomId: r.id,
+        roomTitle: r.title,
+        playerCount: r.players.length,
+        match: exported
+      });
+    }
+    scheduleServerlessTurnTimer(r, 600);
+    announceServerlessRoom();
+  }
+
+  function dissolveServerlessPostGameRoom(r, reason, leaverNickname = null, excludePeerId = null) {
+    if (!r) return;
+    clearServerlessRoomTimers(r);
+    if (hostAnnounceTimer) {
+      clearInterval(hostAnnounceTimer);
+      hostAnnounceTimer = null;
+    }
+    const members = [...r.players];
+    r.players = [];
+    r.match = null;
+    mqttPub(TOPIC_LOBBY, { kind: 'remove', roomId: r.id });
+    serverlessRooms.delete(r.id);
+    if (hostedServerlessRoom === r) {
+      hostedServerlessRoom = null;
+      joinedHostPeerId = null;
+    }
+
+    const freshRooms = getFreshServerlessRooms();
+    for (const p of members) {
+      if (excludePeerId && p.id === excludePeerId) continue;
+      sendToServerlessPeer(p.id, {
+        type: 'rematch_cancelled',
+        reason,
+        leaverNickname,
+        rooms: freshRooms
+      });
+    }
+  }
+
+  function finalizeServerlessMatch(r) {
+    if (!r || !r.match) return;
+    clearServerlessRoomTimers(r);
+
+    if (r.players.length <= 1) {
+      const survivor = r.players[0];
+      if (hostAnnounceTimer) {
+        clearInterval(hostAnnounceTimer);
+        hostAnnounceTimer = null;
+      }
+      mqttPub(TOPIC_LOBBY, { kind: 'remove', roomId: r.id });
+      serverlessRooms.delete(r.id);
+      if (hostedServerlessRoom === r) {
+        hostedServerlessRoom = null;
+        joinedHostPeerId = null;
+      }
+      if (survivor) {
+        survivor.stats.wins += 1;
+        sendToServerlessPeer(survivor.id, {
+          type: 'match_forfeit_win',
+          leaverNickname: '상대방',
+          meStats: survivor.stats,
+          rooms: getFreshServerlessRooms()
+        });
+      }
+      return;
+    }
+
+    const sorted = [...r.match.players].sort((a, b) => {
+      if (a.alive !== b.alive) return a.alive ? -1 : 1;
+      if (a.deathOrder !== b.deathOrder) return b.deathOrder - a.deathOrder;
+      return b.damageDealt - a.damageDealt;
+    });
+    const rankings = sorted.map((pl, idx) => ({
+      rank: idx + 1,
+      id: pl.id,
+      nickname: pl.nickname,
+      badge: pl.badge,
+      kills: pl.kills,
+      damageDealt: pl.damageDealt
+    }));
+    const winnerId = r.match.winnerId;
+
+    r.status = 'post_game';
+    r.match = null;
+    r.rematchVotes = new Set();
+
+    for (const pl of r.players) {
+      const out = !winnerId ? 'draw' : pl.id === winnerId ? 'win' : 'lose';
+      if (out === 'win') pl.stats.wins += 1;
+      else if (out === 'lose') pl.stats.losses += 1;
+      else pl.stats.draws += 1;
+      sendToServerlessPeer(pl.id, {
+        type: 'match_over',
+        result: out,
+        winnerId,
+        rankings,
+        meStats: pl.stats,
+        roomPlayerCount: r.players.length,
+        rematchTimeoutSec: REMATCH_LIMIT_SEC
+      });
+    }
+
+    r.rematchTimer = setTimeout(() => {
+      if (hostedServerlessRoom === r && r.status === 'post_game') {
+        dissolveServerlessPostGameRoom(r, 'timeout');
+      }
+    }, REMATCH_LIMIT_SEC * 1000);
+
+    announceServerlessRoom();
+  }
+
+  function resolveServerlessTurnResult(r, res) {
+    for (const p of r.players) {
+      sendToServerlessPeer(p.id, { type: 'turn_resolved', result: res });
+    }
+    let maxPts = 0;
+    for (const pr of res.projectiles || []) {
+      if (pr.points && pr.points.length > maxPts) maxPts = pr.points.length;
+    }
+    const animDelayMs = res.projectiles && res.projectiles.length > 0
+      ? Math.min(7500, maxPts * 25 + 1600)
+      : 900;
+
+    if (r.match.status === 'finished') {
+      clearServerlessRoomTimers(r);
+      r.turnTimer = setTimeout(() => {
+        if (hostedServerlessRoom === r && r.match && r.match.status === 'finished') {
+          finalizeServerlessMatch(r);
+        }
+      }, animDelayMs);
+    } else {
+      scheduleServerlessTurnTimer(r, animDelayMs);
+    }
+  }
+
+  function handleServerlessPlayerLeave(r, leaverId) {
+    if (!r) return;
+    const leaverObj = r.players.find((p) => p.id === leaverId);
+    const leavingName = leaverObj ? leaverObj.nickname : '상대방';
+
+    if (r.status === 'post_game') {
+      dissolveServerlessPostGameRoom(r, 'player_exit', leavingName, leaverId);
+      return;
+    }
+
+    const wasPlaying = r.status === 'playing' && Boolean(r.match);
+    r.players = r.players.filter((p) => p.id !== leaverId);
+
+    if (wasPlaying) {
+      if (leaverObj && r.match.status === 'playing') {
+        leaverObj.stats.losses += 1;
+      }
+
+      if (r.players.length === 0) {
+        clearServerlessRoomTimers(r);
+        mqttPub(TOPIC_LOBBY, { kind: 'remove', roomId: r.id });
+        serverlessRooms.delete(r.id);
+        if (hostedServerlessRoom === r) {
+          hostedServerlessRoom = null;
+          joinedHostPeerId = null;
+        }
+        return;
+      }
+
+      const match = r.match;
+      const pIdx = match.players.findIndex((p) => p.id === leaverId);
+      if (pIdx !== -1 && match.players[pIdx].alive) {
+        match.players[pIdx].hp = 0;
+        match.players[pIdx].alive = false;
+        match.players[pIdx].leftMatch = true;
+        match.deathCounter = (match.deathCounter || 0) + 1;
+        match.players[pIdx].deathOrder = match.deathCounter;
+      }
+
+      if (r.players.length === 1) {
+        clearServerlessRoomTimers(r);
+        if (hostAnnounceTimer) {
+          clearInterval(hostAnnounceTimer);
+          hostAnnounceTimer = null;
+        }
+        const survivor = r.players[0];
+        r.players = [];
+        r.match = null;
+        mqttPub(TOPIC_LOBBY, { kind: 'remove', roomId: r.id });
+        serverlessRooms.delete(r.id);
+        if (hostedServerlessRoom === r) {
+          hostedServerlessRoom = null;
+          joinedHostPeerId = null;
+        }
+        survivor.stats.wins += 1;
+        sendToServerlessPeer(survivor.id, {
+          type: 'match_forfeit_win',
+          leaverNickname: leavingName,
+          meStats: survivor.stats,
+          rooms: getFreshServerlessRooms()
+        });
+        return;
+      }
+
+      const alivePlayers = match.players.filter(
+        (p) => p.alive && r.players.some((rp) => rp.id === p.id)
+      );
+      for (const p of r.players) {
+        sendToServerlessPeer(p.id, {
+          type: 'player_left_match',
+          playerId: leaverId,
+          nickname: leavingName,
+          remainingCount: r.players.length,
+          playersSnapshot: Engine.serializePlayers(match.players)
+        });
+      }
+
+      if (alivePlayers.length <= 1) {
+        match.status = 'finished';
+        match.winnerId = alivePlayers.length === 1 ? alivePlayers[0].id : null;
+        finalizeServerlessMatch(r);
+      } else if (match.turnIndex === pIdx) {
+        Engine.advanceTurnAndCheckWinner(match);
+        for (const p of r.players) {
+          sendToServerlessPeer(p.id, {
+            type: 'turn_skipped',
+            wind: match.wind,
+            windRoundsLeft: match.windRoundsLeft,
+            windChanged: Boolean(match.windChanged),
+            roundNumber: match.roundNumber,
+            turnIndex: match.turnIndex,
+            turnNumber: match.turnNumber,
+            playersSnapshot: Engine.serializePlayers(match.players)
+          });
+        }
+        scheduleServerlessTurnTimer(r, 300);
+      }
+      announceServerlessRoom();
+      return;
+    }
+
+    if (r.players.length === 0) {
+      clearServerlessRoomTimers(r);
+      mqttPub(TOPIC_LOBBY, { kind: 'remove', roomId: r.id });
+      serverlessRooms.delete(r.id);
+      if (hostedServerlessRoom === r) {
+        hostedServerlessRoom = null;
+        joinedHostPeerId = null;
+      }
+      return;
+    }
+
+    broadcastHostedWaitingRoom();
+    for (const p of r.players) {
+      sendToServerlessPeer(p.id, {
+        type: 'room_notice',
+        text: `🚪 ${leavingName}님이 퇴장했습니다. (현재 ${r.players.length}명)`
+      });
+    }
+  }
+
+  function handleServerlessHostDisconnected(leaverNickOpt = null) {
+    const oldHostId = joinedHostPeerId;
+    if (!oldHostId || oldHostId === app.myClientId) return;
+
+    const modal = document.getElementById('gameover-modal');
+    if (modal && !modal.classList.contains('hidden')) {
+      joinedHostPeerId = null;
+      handleIncomingNetMessage({
+        type: 'rematch_cancelled',
+        reason: 'player_exit',
+        leaverNickname: leaverNickOpt || '방장',
+        rooms: getFreshServerlessRooms()
+      });
+      return;
+    }
+
+    if (app.screen === 'game' && app.renderMatch && app.renderMatch.status === 'playing') {
+      const hostPlayer = app.renderMatch.players.find((p) => p.id === oldHostId);
+      const hostName = leaverNickOpt || (hostPlayer ? hostPlayer.nickname : '상대방');
+
+      let remainingRoomPlayers = [];
+      if (app.currentRoom && Array.isArray(app.currentRoom.players)) {
+        remainingRoomPlayers = app.currentRoom.players.filter((p) => p.id !== oldHostId);
+      } else {
+        remainingRoomPlayers = app.renderMatch.players
+          .filter((p) => p.id !== oldHostId && !p.leftMatch)
+          .map((p) => ({
+            id: p.id,
+            nickname: p.nickname,
+            tankType: p.tankType || 'cannon',
+            stats: p.id === app.myClientId ? { ...app.stats } : { wins: 0, losses: 0, draws: 0 }
+          }));
+      }
+
+      if (remainingRoomPlayers.length <= 1) {
+        joinedHostPeerId = null;
+        handleIncomingNetMessage({
+          type: 'match_forfeit_win',
+          leaverNickname: hostName,
+          rooms: getFreshServerlessRooms()
+        });
+        return;
+      }
+
+      // 2 or more players remain in 3P/4P: promote remainingRoomPlayers[0] to new host seamlessly!
+      const newHost = remainingRoomPlayers[0];
+      joinedHostPeerId = newHost.id;
+      lastHostSeenAt = Date.now();
+      if (app.currentRoom) {
+        app.currentRoom.hostId = newHost.id;
+        app.currentRoom.players = remainingRoomPlayers;
+      }
+
+      if (newHost.id === app.myClientId) {
+        const clonedMatch = {
+          seed: app.renderMatch.seed || 12345,
+          aiLevel: 1,
+          rngState: (app.renderMatch.seed || 12345) + app.renderMatch.turnNumber * 97,
+          mapType: app.renderMatch.mapType,
+          terrain: new Float32Array(app.renderMatch.terrain),
+          wind: app.renderMatch.wind,
+          turnIndex: app.renderMatch.turnIndex,
+          turnNumber: app.renderMatch.turnNumber,
+          roundNumber: app.renderMatch.roundNumber || 1,
+          windRoundsLeft: app.renderMatch.windRoundsLeft || 3,
+          windChanged: false,
+          isPractice: false,
+          practiceScore: 0,
+          practiceTargets: [],
+          players: JSON.parse(JSON.stringify(app.renderMatch.players)),
+          deathCounter: app.renderMatch.players.filter((p) => !p.alive).length,
+          status: 'playing',
+          winnerId: null
+        };
+        hostedServerlessRoom = {
+          id: 'room_' + app.myClientId,
+          title: (app.currentRoom && app.currentRoom.title) || `${app.nickname}의 탱크 클래시 방`,
+          mapType: app.renderMatch.mapType || 'random',
+          status: 'playing',
+          players: remainingRoomPlayers.map((rp) => ({
+            id: rp.id,
+            nickname: rp.nickname,
+            tankType: rp.tankType || 'cannon',
+            stats: rp.id === app.myClientId ? { ...app.stats } : rp.stats || { wins: 0, losses: 0, draws: 0 },
+            lastSeenAt: Date.now()
+          })),
+           prod: true,
+          match: clonedMatch
+        };
+        // Include oldHostId temporarily so handleServerlessPlayerLeave eliminates old host & notifies peers
+        hostedServerlessRoom.players.unshift({
+          id: oldHostId,
+          nickname: hostName,
+          tankType: 'cannon',
+          stats: { wins: 0, losses: 0, draws: 0 }
+        });
+        handleServerlessPlayerLeave(hostedServerlessRoom, oldHostId);
+      }
+    }
+  }
+
   function sendToServerlessPeer(peerId, serverMsg) {
     if (peerId === app.myClientId) {
       handleIncomingNetMessage(serverMsg);
@@ -3741,8 +4420,11 @@
 
     if (topic === TOPIC_PEER_PREFIX + app.myClientId) {
       if (pkt.kind === 'srv') {
+        lastHostSeenAt = Date.now();
         handleIncomingNetMessage(pkt.msg);
       } else if (pkt.kind === 'cmd' && hostedServerlessRoom) {
+        const peer = hostedServerlessRoom.players.find((p) => p.id === pkt.fromId);
+        if (peer) peer.lastSeenAt = Date.now();
         handleServerlessHostCmd(pkt.fromId, pkt.payload);
       }
     }
@@ -3762,6 +4444,12 @@
     const r = hostedServerlessRoom;
     if (!r || !msg) return;
 
+    if (msg.type === 'peer_heartbeat') {
+      const p = r.players.find((x) => x.id === fromId);
+      if (p) p.lastSeenAt = Date.now();
+      return;
+    }
+
     if (msg.type === 'join_room') {
       if (r.status !== 'waiting') {
         sendToServerlessPeer(fromId, { type: 'error', message: '이미 게임이 진행 중인 방입니다.' });
@@ -3776,7 +4464,8 @@
           id: fromId,
           nickname: (msg.nickname || '유저').slice(0, 10),
           tankType: msg.tankType || 'cannon',
-          stats: msg.stats || { wins: 0, losses: 0, draws: 0 }
+          stats: msg.stats || { wins: 0, losses: 0, draws: 0 },
+          lastSeenAt: Date.now()
         });
       }
       broadcastHostedWaitingRoom();
@@ -3808,30 +4497,11 @@
       }
     } else if (msg.type === 'start_match' && fromId === app.myClientId) {
       if (r.players.length < 2) return;
-      r.match = Engine.createMatch({
-        mapType: r.mapType,
-        players: r.players.map((p, idx) => ({
-          id: p.id,
-          nickname: p.nickname,
-          isAi: false,
-          tankType: p.tankType || 'cannon',
-          slotIndex: idx
-        }))
-      });
-      r.status = 'playing';
-      // Keep packet compact by sending seed + mapType + players; terrain reconstructed deterministically or sent
-      const exported = Engine.exportMatchState(r.match);
-      for (const p of r.players) {
-        sendToServerlessPeer(p.id, {
-          type: 'match_started',
-          myId: p.id,
-          roomId: r.id,
-          roomTitle: r.title,
-          playerCount: r.players.length,
-          match: exported
-        });
+      const hostP = r.players.find((x) => x.id === fromId);
+      if (hostP && typeof msg.bonusSupply === 'boolean') {
+        hostP.bonusSupply = msg.bonusSupply;
       }
-      announceServerlessRoom();
+      startServerlessRoomMatch(r);
     } else if (msg.type === 'move_tank' && r.status === 'playing' && r.match) {
       const active = r.match.players[r.match.turnIndex];
       if (!active || active.id !== fromId) return;
@@ -3847,6 +4517,28 @@
           fuel: +active.fuel.toFixed(1),
           alive: active.alive
         });
+      }
+      if (!active.alive) {
+        const sinkRes = {
+          kind: 'sink_move',
+          shooterId: active.id,
+          weaponId: 'normal',
+          projectiles: [],
+          craters: [],
+          damages: [{ playerId: active.id, damage: 999, killed: true, sank: true, x: active.x, y: active.y }],
+          practiceHits: []
+        };
+        Engine.advanceTurnAndCheckWinner(r.match);
+        sinkRes.wind = r.match.wind;
+        sinkRes.windRoundsLeft = r.match.windRoundsLeft;
+        sinkRes.windChanged = Boolean(r.match.windChanged);
+        sinkRes.roundNumber = r.match.roundNumber;
+        sinkRes.turnIndex = r.match.turnIndex;
+        sinkRes.turnNumber = r.match.turnNumber;
+        sinkRes.status = r.match.status;
+        sinkRes.winnerId = r.match.winnerId;
+        sinkRes.playersSnapshot = Engine.serializePlayers(r.match.players);
+        resolveServerlessTurnResult(r, sinkRes);
       }
     } else if (msg.type === 'aim_sync' && r.status === 'playing' && r.match) {
       const active = r.match.players[r.match.turnIndex];
@@ -3867,49 +4559,38 @@
     } else if (msg.type === 'fire_turn' && r.status === 'playing' && r.match) {
       const active = r.match.players[r.match.turnIndex];
       if (!active || active.id !== fromId) return;
+      if (r.turnTimer) {
+        clearTimeout(r.turnTimer);
+        r.turnTimer = null;
+      }
       const res = Engine.executeTurnAction(r.match, msg);
       if (!res) return;
+      resolveServerlessTurnResult(r, res);
+    } else if (msg.type === 'rematch_vote' && r.status === 'post_game') {
+      const voter = r.players.find((x) => x.id === fromId);
+      if (voter && typeof msg.bonusSupply === 'boolean') {
+        voter.bonusSupply = msg.bonusSupply;
+      }
+      if (!r.rematchVotes) r.rematchVotes = new Set();
+      r.rematchVotes.add(fromId);
       for (const p of r.players) {
-        sendToServerlessPeer(p.id, { type: 'turn_resolved', result: res });
-      }
-      if (r.match.status === 'finished') {
-        const sorted = [...r.match.players].sort((a, b) => {
-          if (a.alive !== b.alive) return a.alive ? -1 : 1;
-          return b.deathOrder - a.deathOrder;
+        sendToServerlessPeer(p.id, {
+          type: 'rematch_vote_update',
+          votedIds: Array.from(r.rematchVotes),
+          votedCount: r.rematchVotes.size,
+          totalCount: r.players.length
         });
-        const rankings = sorted.map((pl, idx) => ({
-          rank: idx + 1,
-          id: pl.id,
-          nickname: pl.nickname,
-          badge: pl.badge,
-          kills: pl.kills,
-          damageDealt: pl.damageDealt
-        }));
-        const winnerId = r.match.winnerId;
-        setTimeout(() => {
-          for (const pl of r.players) {
-            const out = !winnerId ? 'draw' : pl.id === winnerId ? 'win' : 'lose';
-            if (out === 'win') pl.stats.wins += 1;
-            else if (out === 'lose') pl.stats.losses += 1;
-            else pl.stats.draws += 1;
-            sendToServerlessPeer(pl.id, {
-              type: 'match_over',
-              result: out,
-              winnerId,
-              rankings,
-              meStats: pl.stats
-            });
-          }
-          r.status = 'waiting';
-          r.match = null;
-          announceServerlessRoom();
-        }, 3200);
       }
+      if (r.rematchVotes.size >= r.players.length && r.players.length >= 2) {
+        startServerlessRoomMatch(r);
+      }
+    } else if (msg.type === 'post_game_exit') {
+      const leaver = r.players.find((x) => x.id === fromId);
+      dissolveServerlessPostGameRoom(r, 'player_exit', leaver ? leaver.nickname : '상대방', fromId);
     } else if (msg.type === 'back_to_room') {
       if (r.status === 'waiting') broadcastHostedWaitingRoom();
     } else if (msg.type === 'leave_room') {
-      r.players = r.players.filter((p) => p.id !== fromId);
-      if (r.status === 'waiting') broadcastHostedWaitingRoom();
+      handleServerlessPlayerLeave(r, fromId);
     }
   }
 
@@ -3919,7 +4600,7 @@
       ws.readyState === WebSocket.OPEN &&
       (transportMode === 'server' || (transportMode === 'serverless' && mqttConnectedOnce));
     if (!isReady) {
-      if (obj.type !== 'aim_sync' && obj.type !== 'move_tank') {
+      if (obj.type !== 'aim_sync' && obj.type !== 'move_tank' && obj.type !== 'peer_heartbeat') {
         pendingNetQueue.push(obj);
       }
       ensureNetworkConnected();
@@ -3932,6 +4613,7 @@
     }
 
     if (transportMode !== 'serverless') return;
+    startServerlessWatchdog();
 
     if (obj.type === 'get_rooms') {
       mqttPub(TOPIC_LOBBY, { kind: 'discover', fromId: app.myClientId });
@@ -3947,7 +4629,8 @@
             id: app.myClientId,
             nickname: app.nickname,
             tankType: app.myTankType,
-            stats: { ...app.stats }
+            stats: { ...app.stats },
+            lastSeenAt: Date.now()
           }
         ],
         match: null
@@ -3959,32 +4642,56 @@
     } else if (obj.type === 'join_room') {
       const target = serverlessRooms.get(obj.roomId);
       joinedHostPeerId = target ? target.hostId : obj.roomId.replace('room_', '');
+      lastHostSeenAt = Date.now();
       mqttPub(TOPIC_PEER_PREFIX + joinedHostPeerId, {
         kind: 'cmd',
         fromId: app.myClientId,
         payload: obj
       });
-    } else if (obj.type === 'leave_room') {
+    } else if (obj.type === 'leave_room' || obj.type === 'post_game_exit') {
       if (hostedServerlessRoom) {
-        if (hostAnnounceTimer) clearInterval(hostAnnounceTimer);
-        for (const p of hostedServerlessRoom.players) {
-          if (p.id !== app.myClientId) {
-            sendToServerlessPeer(p.id, { type: 'left_room', rooms: [] });
+        const r = hostedServerlessRoom;
+        if (r.status === 'post_game') {
+          dissolveServerlessPostGameRoom(r, 'player_exit', app.nickname, app.myClientId);
+        } else if (r.status === 'playing' && r.match) {
+          for (const p of r.players) {
+            if (p.id !== app.myClientId) {
+              sendToServerlessPeer(p.id, {
+                type: 'host_left_match',
+                hostId: app.myClientId,
+                hostNickname: app.nickname
+              });
+            }
           }
+          clearServerlessRoomTimers(r);
+          if (hostAnnounceTimer) clearInterval(hostAnnounceTimer);
+          mqttPub(TOPIC_LOBBY, { kind: 'remove', roomId: r.id });
+          serverlessRooms.delete(r.id);
+          hostedServerlessRoom = null;
+          joinedHostPeerId = null;
+        } else {
+          if (hostAnnounceTimer) clearInterval(hostAnnounceTimer);
+          for (const p of r.players) {
+            if (p.id !== app.myClientId) {
+              sendToServerlessPeer(p.id, { type: 'left_room', rooms: [] });
+            }
+          }
+          mqttPub(TOPIC_LOBBY, { kind: 'remove', roomId: r.id });
+          serverlessRooms.delete(r.id);
+          hostedServerlessRoom = null;
+          joinedHostPeerId = null;
         }
-        mqttPub(TOPIC_LOBBY, { kind: 'remove', roomId: hostedServerlessRoom.id });
-        serverlessRooms.delete(hostedServerlessRoom.id);
-        hostedServerlessRoom = null;
-        joinedHostPeerId = null;
-        showScreen('lobby');
+        if (obj.target === 'menu') showScreen('menu');
+        else showScreen('lobby');
       } else if (joinedHostPeerId) {
         mqttPub(TOPIC_PEER_PREFIX + joinedHostPeerId, {
           kind: 'cmd',
           fromId: app.myClientId,
-          payload: { type: 'leave_room' }
+          payload: { type: obj.type, target: obj.target }
         });
         joinedHostPeerId = null;
-        showScreen('lobby');
+        if (obj.target === 'menu') showScreen('menu');
+        else showScreen('lobby');
       }
     } else if (joinedHostPeerId) {
       if (joinedHostPeerId === app.myClientId) {
@@ -4004,6 +4711,14 @@
   // ==========================================
   function handleIncomingNetMessage(msg) {
     switch (msg.type) {
+      case 'host_heartbeat':
+        lastHostSeenAt = Date.now();
+        break;
+
+      case 'host_left_match':
+        handleServerlessHostDisconnected(msg.hostNickname || '방장');
+        break;
+
       case 'welcome':
       case 'room_list':
         renderLobbyList(msg.rooms || []);
@@ -4016,14 +4731,20 @@
       case 'left_room':
         app.currentRoom = null;
         clearTurnCountdown();
+        clearPostGameRematchCountdown();
         document.getElementById('gameover-modal').classList.add('hidden');
         renderLobbyList(msg.rooms || []);
-        showScreen('lobby');
+        if (msg.target === 'menu') {
+          showScreen('menu');
+        } else {
+          showScreen('lobby');
+        }
         break;
 
       case 'room_update':
         if (msg.myId) app.myClientId = msg.myId;
         app.currentRoom = msg.room;
+        clearPostGameRematchCountdown();
         document.getElementById('gameover-modal').classList.add('hidden');
         renderWaitingRoomUI(msg.room);
         if (app.screen !== 'room') {
@@ -4041,10 +4762,14 @@
         break;
 
       case 'match_started':
+        clearPostGameRematchCountdown();
         if (msg.myId) app.myClientId = msg.myId;
         app.mode = 'multi';
+        app.bonusSupplyArmed = false;
+        syncRewardSupplyUI();
         document.getElementById('gameover-modal').classList.add('hidden');
         hydrateRenderMatchFromExport(msg.match);
+        setActiveMatchLossGuard(true);
         showScreen('game');
         resizeBattleCanvas();
         focusActiveTank(true);
@@ -4094,8 +4819,14 @@
       case 'player_left_match':
         if (app.renderMatch && msg.playersSnapshot) {
           app.renderMatch.players = msg.playersSnapshot;
+          if (app.currentRoom && Array.isArray(app.currentRoom.players)) {
+            app.currentRoom.players = app.currentRoom.players.filter((p) => p.id !== msg.playerId);
+          }
           syncAllBattleHud();
-          showToast(`🚪 ${msg.nickname}님이 퇴장했습니다.`, 2200);
+          showToast(
+            `🚪 ${msg.nickname}님이 이탈하여 1패 처리되었습니다. 남은 인원으로 게임을 계속합니다!`,
+            2800
+          );
         }
         break;
 
@@ -4111,8 +4842,70 @@
         }
         break;
 
+      case 'match_forfeit_win': {
+        clearTurnCountdown();
+        clearPostGameRematchCountdown();
+        clearAiTimer();
+        stopShellFlightSound();
+        app.activeShell = null;
+        app.isAnimatingTurn = false;
+        setActiveMatchLossGuard(false);
+
+        if (msg.meStats) {
+          app.stats = {
+            wins: Math.max(app.stats.wins + 1, Number(msg.meStats.wins) || 0),
+            losses: Math.max(app.stats.losses, Number(msg.meStats.losses) || 0),
+            draws: Math.max(app.stats.draws, Number(msg.meStats.draws) || 0)
+          };
+        } else {
+          app.stats.wins += 1;
+        }
+        saveProfile();
+
+        app.currentRoom = null;
+        app.renderMatch = null;
+        joinedHostPeerId = null;
+        document.getElementById('gameover-modal').classList.add('hidden');
+        if (msg.rooms) renderLobbyList(msg.rooms);
+        showScreen('lobby');
+        netSend({ type: 'get_rooms' });
+        playFanfareSound('win');
+        showGlobalToast(
+          `🏆 ${msg.leaverNickname || '상대방'}님이 게임 중 나가 1승을 획득했으며 대기실로 자동 이동했습니다!`,
+          4200
+        );
+        break;
+      }
+
+      case 'rematch_vote_update': {
+        app.rematchVotedCount = Number(msg.votedCount) || 0;
+        if (msg.totalCount) app.rematchTotalPlayers = Number(msg.totalCount);
+        updateRematchVoteUI();
+        break;
+      }
+
+      case 'rematch_cancelled': {
+        clearTurnCountdown();
+        clearPostGameRematchCountdown();
+        app.currentRoom = null;
+        app.renderMatch = null;
+        joinedHostPeerId = null;
+        document.getElementById('gameover-modal').classList.add('hidden');
+        if (msg.rooms) renderLobbyList(msg.rooms);
+        showScreen('lobby');
+        netSend({ type: 'get_rooms' });
+        const noticeTxt =
+          msg.reason === 'timeout'
+            ? '⏰ 30초 안에 재대결을 선택하지 않아 대기실로 자동 이동했습니다.'
+            : `🚪 ${msg.leaverNickname || '상대방'}님이 나가기를 선택하여 대기실로 자동 이동했습니다.`;
+        showGlobalToast(noticeTxt, 3800);
+        break;
+      }
+
       case 'match_over': {
         clearTurnCountdown();
+        setActiveMatchLossGuard(false);
+        app.completedMatchesCount = (app.completedMatchesCount || 0) + 1;
         if (msg.meStats) {
           app.stats = {
             wins: Number(msg.meStats.wins) || 0,
@@ -4128,10 +4921,14 @@
             : msg.result === 'lose'
             ? `💔 패배 (${winnerRow ? winnerRow.nickname + ' 우승' : '아쉬운 결과'})`
             : '🤝 무승부!';
-        const subTxt = '방 대기실로 돌아가 바로 재경기할 수 있습니다.';
+        const subTxt =
+          '30초 안에 재대결을 선택하면 바로 다음 경기가 시작됩니다.';
 
-        // Wait briefly if shot animation is still wrapping up
-        const showNow = () => openResultModal(msg.result, titleTxt, subTxt, msg.rankings || []);
+        const showNow = () =>
+          openResultModal(msg.result, titleTxt, subTxt, msg.rankings || [], null, null, {
+            roomPlayerCount: msg.roomPlayerCount || 2,
+            rematchTimeoutSec: msg.rematchTimeoutSec || REMATCH_LIMIT_SEC
+          });
         if (app.isAnimatingTurn) {
           setTimeout(showNow, 900);
         } else {
@@ -4585,6 +5382,12 @@
     if (nickInput) nickInput.value = app.nickname;
     renderHeaderStats();
     showScreen('menu');
+    if (app.hadAbnormalLossOnBoot) {
+      app.hadAbnormalLossOnBoot = false;
+      setTimeout(() => {
+        showGlobalToast('⚠️ 이전 게임 중 강제 종료(비정상 이탈)로 인해 1패가 추가되었습니다.', 4000);
+      }, 450);
+    }
 
     // Sound Toggle
     const toggleSound = () => {
@@ -4818,20 +5621,28 @@
 
     document.getElementById('btn-host-start-match').addEventListener('click', () => {
       playUiClick(700);
-      netSend({ type: 'start_match' });
+      netSend({ type: 'start_match', bonusSupply: Boolean(app.bonusSupplyArmed) });
     });
 
     // Battle Screen Top & Camera Controls
     document.getElementById('btn-battle-exit').addEventListener('click', () => {
+      const penalized = penalizeMidGameExit();
       clearTurnCountdown();
+      clearPostGameRematchCountdown();
       clearAiTimer();
+      stopShellFlightSound();
       app.activeShell = null;
+      app.isAnimatingTurn = false;
       document.getElementById('gameover-modal').classList.add('hidden');
       if (app.mode === 'multi') {
-        netSend({ type: 'leave_room' });
+        netSend({ type: 'leave_room', reason: 'mid_game_exit' });
         showScreen('lobby');
+        netSend({ type: 'get_rooms' });
       } else {
         showScreen('single-setup');
+      }
+      if (penalized) {
+        showGlobalToast('⚠️ 게임 도중 나가기를 선택하여 1패가 추가되었습니다.', 3500);
       }
     });
 
@@ -4865,21 +5676,30 @@
     });
 
     // Game Over Modal Buttons
-    const proceedRematch = () => {
-      document.getElementById('gameover-modal').classList.add('hidden');
-      if (app.mode === 'single') {
-        if (app.singleSubMode === 'ai' && app.aiCount > 0) {
-          const maxLv = Engine.MAX_AI_LEVEL || 30;
-          if (app.lastSingleAiOutcome === 'win') {
-            app.aiLevel = app.aiLevel < maxLv ? app.aiLevel + 1 : 1;
-          }
-          app.lastSingleAiOutcome = null;
-        }
-        startSingleGame();
-      } else {
-        netSend({ type: 'back_to_room' });
-        showScreen('room');
+    const voteMultiRematch = () => {
+      if (app.rematchVoted) return;
+      app.rematchVoted = true;
+      const rematchBtn = document.getElementById('btn-modal-rematch');
+      if (rematchBtn) {
+        rematchBtn.disabled = true;
+        rematchBtn.textContent = '⏳ 재대결 대기중...';
       }
+      netSend({
+        type: 'rematch_vote',
+        bonusSupply: Boolean(app.bonusSupplyArmed)
+      });
+    };
+
+    const proceedSingleRematch = () => {
+      document.getElementById('gameover-modal').classList.add('hidden');
+      if (app.singleSubMode === 'ai' && app.aiCount > 0) {
+        const maxLv = Engine.MAX_AI_LEVEL || 30;
+        if (app.lastSingleAiOutcome === 'win') {
+          app.aiLevel = app.aiLevel < maxLv ? app.aiLevel + 1 : 1;
+        }
+        app.lastSingleAiOutcome = null;
+      }
+      startSingleGame();
     };
 
     const btnModalRewardRetry = document.getElementById('btn-modal-reward-retry');
@@ -4887,41 +5707,82 @@
       btnModalRewardRetry.addEventListener('click', () => {
         playUiClick(620);
         if (app.bonusSupplyArmed) {
-          proceedRematch();
+          if (app.mode === 'multi') voteMultiRematch();
+          else proceedSingleRematch();
           return;
         }
         requestRewardedAd('modal_boost', () => {
           app.bonusSupplyArmed = true;
           syncRewardSupplyUI();
-          proceedRematch();
+          if (app.mode === 'multi') voteMultiRematch();
+          else proceedSingleRematch();
         });
       });
     }
 
     document.getElementById('btn-modal-rematch').addEventListener('click', () => {
-      document.getElementById('gameover-modal').classList.add('hidden');
       playUiClick(620);
-      // Show Interstitial Ad every 2 completed matches
+      if (app.mode === 'multi') {
+        voteMultiRematch();
+        return;
+      }
+      document.getElementById('gameover-modal').classList.add('hidden');
+      // Show Interstitial Ad every 2 completed single matches
       if (app.completedMatchesCount > 0 && app.completedMatchesCount % 2 === 0) {
         requestInterstitialAd(() => {
-          proceedRematch();
+          proceedSingleRematch();
         });
       } else {
-        proceedRematch();
+        proceedSingleRematch();
       }
     });
 
+    const btnModalLobby = document.getElementById('btn-modal-lobby');
+    if (btnModalLobby) {
+      btnModalLobby.addEventListener('click', () => {
+        playUiClick(520);
+        clearTurnCountdown();
+        clearPostGameRematchCountdown();
+        clearAiTimer();
+        document.getElementById('gameover-modal').classList.add('hidden');
+        if (app.mode === 'multi') {
+          netSend({ type: 'post_game_exit', target: 'lobby' });
+          showScreen('lobby');
+          netSend({ type: 'get_rooms' });
+        } else {
+          showScreen('single-setup');
+        }
+      });
+    }
+
     document.getElementById('btn-modal-exit').addEventListener('click', () => {
-      document.getElementById('gameover-modal').classList.add('hidden');
+      playUiClick(460);
       clearTurnCountdown();
+      clearPostGameRematchCountdown();
       clearAiTimer();
+      document.getElementById('gameover-modal').classList.add('hidden');
       if (app.mode === 'multi') {
-        netSend({ type: 'leave_room' });
-        showScreen('lobby');
+        netSend({ type: 'post_game_exit', target: 'menu' });
+        showScreen('menu');
       } else {
         showScreen('menu');
       }
     });
+
+    // Handle Abnormal Exit / Tab Close / App Force-Close
+    const handleAbnormalUnload = () => {
+      if (app.screen === 'game') {
+        penalizeMidGameExit();
+      }
+      if (app.mode === 'multi' && (app.screen === 'game' || app.screen === 'room' || app.currentRoom || hostedServerlessRoom || joinedHostPeerId)) {
+        try {
+          netSend({ type: 'leave_room', reason: 'abnormal' });
+        } catch (e) {}
+      }
+    };
+    window.onAppForceClosing = handleAbnormalUnload;
+    window.addEventListener('pagehide', handleAbnormalUnload);
+    window.addEventListener('beforeunload', handleAbnormalUnload);
 
     renderTankCardPreviews();
     setupBattleCanvasDragAndMinimap();
@@ -4938,8 +5799,13 @@
       }
       const gameoverModal = document.getElementById('gameover-modal');
       if (gameoverModal && !gameoverModal.classList.contains('hidden')) {
-        const exitBtn = document.getElementById('btn-modal-exit');
-        if (exitBtn) exitBtn.click();
+        if (app.mode === 'multi') {
+          const lobbyBtn = document.getElementById('btn-modal-lobby');
+          if (lobbyBtn) lobbyBtn.click();
+        } else {
+          const exitBtn = document.getElementById('btn-modal-exit');
+          if (exitBtn) exitBtn.click();
+        }
         return true;
       }
       if (app.screen === 'game') {

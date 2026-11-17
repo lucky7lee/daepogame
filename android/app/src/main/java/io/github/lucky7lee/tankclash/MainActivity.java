@@ -457,6 +457,10 @@ public class MainActivity extends Activity {
             bannerAdView = null;
         }
         if (webView != null) {
+            try {
+                webView.evaluateJavascript("window.onAppForceClosing && window.onAppForceClosing();", null);
+            } catch (Exception ignored) {
+            }
             webView.destroy();
             webView = null;
         }

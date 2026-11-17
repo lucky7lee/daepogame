@@ -13,7 +13,7 @@
   <link rel="Shortcut Icon" href="favicon.ico" />
   <link rel="apple-touch-icon" href="icon-192.png" />
   <title>탱크 클래시 (Tank Clash) - 1~4인 턴제 대포 게임</title>
-  <link rel="stylesheet" href="style.css?v=14" />
+  <link rel="stylesheet" href="style.css?v=15" />
 </head>
 <body>
   <div class="app-shell">
@@ -368,7 +368,7 @@
             <span class="guide-sec-ico">🕹️</span>
             <div>
               <h2 class="guide-sec-title">플레이 방법 & 조작 가이드</h2>
-              <p class="guide-sec-sub">각 플레이어는 자신의 턴(제한시간 35초)마다 아래 순서로 행동합니다</p>
+              <p class="guide-sec-sub">각 플레이어는 자신의 턴(제한시간 30초)마다 아래 순서로 행동합니다</p>
             </div>
           </div>
 
@@ -662,7 +662,7 @@
           <div id="turn-indicator" class="turn-pill">
             <span id="turn-badge-dot">🔵</span>
             <span id="turn-player-name">내 턴</span>
-            <span id="turn-timer" class="turn-timer">35s</span>
+            <span id="turn-timer" class="turn-timer">30s</span>
           </div>
         </div>
 
@@ -703,6 +703,19 @@
 
       <!-- Fortress Tactical Bottom Control Deck -->
       <div id="control-deck" class="control-deck">
+        <!-- 30-Second Visual Turn Countdown Gauge Bar -->
+        <div id="turn-countdown-wrap" class="turn-countdown-wrap" title="30초 안에 발사하지 않으면 임의로 자동 발사됩니다">
+          <div class="turn-cd-meta">
+            <span class="turn-cd-ico">⏱️</span>
+            <span id="turn-cd-label" class="turn-cd-label">발사 제한시간</span>
+          </div>
+          <div class="turn-cd-track">
+            <div id="turn-cd-fill" class="turn-cd-fill" style="width: 100%;"></div>
+            <div id="turn-cd-spark" class="turn-cd-spark" style="left: 100%;"></div>
+          </div>
+          <strong id="turn-cd-time" class="turn-cd-time">30.0s</strong>
+        </div>
+
         <!-- Weapon / Special Shell Strip -->
         <div class="weapon-strip">
           <button class="wpn-btn active" data-wpn="normal" type="button">
@@ -788,6 +801,9 @@
 
   </div>
 
+  <!-- Global Screen Toast Notification -->
+  <div id="global-toast" class="global-toast hidden" role="status" aria-live="polite"></div>
+
   <!-- ==========================================
        MATCH OVER / RANKING MODAL
        ========================================== -->
@@ -799,12 +815,25 @@
 
       <div id="modal-ranking-list" class="ranking-list"></div>
 
+      <!-- Multiplayer Post-Game 30s Rematch Vote & Timer Status -->
+      <div id="modal-rematch-box" class="modal-rematch-box hidden">
+        <div class="rematch-box-top">
+          <span id="modal-rematch-vote-text" class="rematch-vote-txt">⚔️ 재대결 동의: 0 / 2명</span>
+          <strong id="modal-rematch-timer-text" class="rematch-timer-txt">⏱️ 30초 남음</strong>
+        </div>
+        <div class="rematch-timer-track">
+          <div id="modal-rematch-timer-fill" class="rematch-timer-fill" style="width: 100%;"></div>
+        </div>
+        <p class="rematch-box-hint">모두 재대결 선택 시 즉시 시작 · 30초 미선택 또는 1명이라도 나가기 선택 시 대기실로 이동</p>
+      </div>
+
       <button id="btn-modal-reward-retry" class="reward-ad-btn modal-reward-btn" type="button">
         📺 광고 보고 풀무장 보급(+고폭탄·더블샷·수리·HP+15) 장착 후 진행!
       </button>
 
-      <div class="modal-actions">
+      <div id="modal-actions-row" class="modal-actions">
         <button id="btn-modal-rematch" class="modal-btn primary" type="button">🔄 새 맵에서 다시하기</button>
+        <button id="btn-modal-lobby" class="modal-btn lobby-btn hidden" type="button">🌐 대기실로</button>
         <button id="btn-modal-exit" class="modal-btn secondary" type="button">🚪 나가기</button>
       </div>
     </div>
@@ -848,7 +877,7 @@
     </div>
   </div>
 
-  <script src="engine.js?v=14"></script>
-  <script src="game.js?v=14"></script>
+  <script src="engine.js?v=15"></script>
+  <script src="game.js?v=15"></script>
 </body>
 </html>

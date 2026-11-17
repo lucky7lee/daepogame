@@ -12,7 +12,8 @@ const { execFile } = require('child_process');
 const DaepoEngine = require('./engine.js');
 
 const PORT = process.env.PORT || 3020;
-const TURN_LIMIT_MS = 35000;
+const TURN_LIMIT_MS = 30000;
+const REMATCH_LIMIT_MS = 30000;
 const MAX_ROOM_PLAYERS = 4;
 
 const MIME_TYPES = {
@@ -394,6 +395,13 @@ function clearRoomTurnTimer(room) {
   }
 }
 
+function clearRoomRematchTimer(room) {
+  if (room && room.rematchTimer) {
+    clearTimeout(room.rematchTimer);
+    room.rematchTimer = null;
+  }
+}
+
 function estimateShotAnimMs(turnResult) {
   if (!turnResult || !turnResult.projectiles || turnResult.projectiles.length === 0) {
     return 900;
@@ -417,18 +425,89 @@ function scheduleRoomTurnTimer(room, extraDelayMs = 0) {
     const activePlayer = room.match.players[room.match.turnIndex];
     if (!activePlayer || !activePlayer.alive) return;
 
-    // Auto-fire with current angle & mid power on turn timeout
+    // Auto-fire arbitrarily on 30-second turn timeout
+    const spec = DaepoEngine.TANK_TYPES[activePlayer.tankType] || DaepoEngine.TANK_TYPES.cannon;
+    const randAng = DaepoEngine.clamp(
+      Math.round(activePlayer.angle + (Math.random() * 16 - 8)),
+      spec.minAngle,
+      spec.maxAngle
+    );
+    const randPow = DaepoEngine.clamp(Math.round(35 + Math.random() * 50), 15, 95);
     const result = DaepoEngine.executeTurnAction(room.match, {
       facing: activePlayer.facing,
-      angle: activePlayer.angle,
-      power: activePlayer.power || 55,
+      angle: randAng,
+      power: randPow,
       weapon: 'normal',
-      aiNote: '⏰ 시간 초과 자동 발사!'
+      aiNote: '⏰ 30초 제한시간 초과 자동 발사!'
     });
     if (result) {
       handleRoomTurnResult(room, result);
     }
   }, totalWait);
+}
+
+function startRoomMatch(room) {
+  if (!room || room.players.length < 2) return;
+  clearRoomTurnTimer(room);
+  clearRoomRematchTimer(room);
+  room.rematchVotes = new Set();
+
+  const playerConfigs = room.players.map((p, idx) => {
+    const useBonus = Boolean(p.bonusSupply);
+    p.bonusSupply = false;
+    return {
+      id: p.id,
+      nickname: p.nickname,
+      isAi: false,
+      tankType: p.tankType || 'cannon',
+      bonusSupply: useBonus,
+      slotIndex: idx
+    };
+  });
+
+  room.match = DaepoEngine.createMatch({
+    mapType: room.mapType,
+    players: playerConfigs
+  });
+  room.status = 'playing';
+
+  const exported = DaepoEngine.exportMatchState(room.match);
+  for (const p of room.players) {
+    sendJson(p, {
+      type: 'match_started',
+      myId: p.id,
+      roomId: room.id,
+      roomTitle: room.title,
+      playerCount: room.players.length,
+      match: exported
+    });
+  }
+
+  scheduleRoomTurnTimer(room, 600);
+  broadcastRoomList();
+}
+
+function dissolvePostGameRoomToLobby(room, reason, leaverNickname = null, excludeClientId = null) {
+  if (!room) return;
+  clearRoomTurnTimer(room);
+  clearRoomRematchTimer(room);
+  const members = [...room.players];
+  room.players = [];
+  room.match = null;
+  rooms.delete(room.id);
+
+  const pubRooms = getPublicRoomList();
+  for (const p of members) {
+    p.roomId = null;
+    if (excludeClientId && p.id === excludeClientId) continue;
+    sendJson(p, {
+      type: 'rematch_cancelled',
+      reason,
+      leaverNickname,
+      rooms: pubRooms
+    });
+  }
+  broadcastRoomList();
 }
 
 function buildMatchRankings(match) {
@@ -454,6 +533,27 @@ function buildMatchRankings(match) {
 function finalizeMultiplayerMatch(room) {
   if (!room || !room.match) return;
   clearRoomTurnTimer(room);
+  clearRoomRematchTimer(room);
+
+  // If only 1 player remained in the room, award forfeit win and move to lobby
+  if (room.players.length <= 1) {
+    const survivor = room.players[0];
+    room.players = [];
+    room.match = null;
+    rooms.delete(room.id);
+    if (survivor) {
+      survivor.stats.wins += 1;
+      survivor.roomId = null;
+      sendJson(survivor, {
+        type: 'match_forfeit_win',
+        leaverNickname: '상대방',
+        meStats: survivor.stats,
+        rooms: getPublicRoomList()
+      });
+    }
+    broadcastRoomList();
+    return;
+  }
 
   const match = room.match;
   const winnerId = match.winnerId;
@@ -469,6 +569,10 @@ function finalizeMultiplayerMatch(room) {
     }
   }
 
+  room.status = 'post_game';
+  room.match = null;
+  room.rematchVotes = new Set();
+
   for (const client of room.players) {
     const myOutcome = !winnerId ? 'draw' : client.id === winnerId ? 'win' : 'lose';
     sendJson(client, {
@@ -476,13 +580,19 @@ function finalizeMultiplayerMatch(room) {
       result: myOutcome,
       winnerId,
       rankings,
-      meStats: client.stats
+      meStats: client.stats,
+      roomPlayerCount: room.players.length,
+      rematchTimeoutSec: 30
     });
   }
 
-  // Return room to 'waiting' state so same 2~4 friends can play again or accept new players!
-  room.status = 'waiting';
-  room.match = null;
+  // 30-second post-game rematch selection timer: if not all select rematch within 30s, everyone goes to lobby
+  room.rematchTimer = setTimeout(() => {
+    if (rooms.has(room.id) && room.status === 'post_game') {
+      dissolvePostGameRoomToLobby(room, 'timeout');
+    }
+  }, REMATCH_LIMIT_MS);
+
   broadcastRoomList();
 }
 
@@ -649,36 +759,10 @@ function handleClientMessage(client, msg) {
         sendJson(client, { type: 'error', message: '최소 2명 이상 참여해야 멀티게임을 시작할 수 있습니다.' });
         return;
       }
-
-      // Create 2, 3, or 4 player match depending on current participants!
-      const playerConfigs = room.players.map((p, idx) => ({
-        id: p.id,
-        nickname: p.nickname,
-        isAi: false,
-        tankType: p.tankType || 'cannon',
-        slotIndex: idx
-      }));
-
-      room.match = DaepoEngine.createMatch({
-        mapType: room.mapType,
-        players: playerConfigs
-      });
-      room.status = 'playing';
-
-      const exported = DaepoEngine.exportMatchState(room.match);
-      for (const p of room.players) {
-        sendJson(p, {
-          type: 'match_started',
-          myId: p.id,
-          roomId: room.id,
-          roomTitle: room.title,
-          playerCount: room.players.length,
-          match: exported
-        });
+      if (typeof msg.bonusSupply === 'boolean') {
+        client.bonusSupply = msg.bonusSupply;
       }
-
-      scheduleRoomTurnTimer(room, 600);
-      broadcastRoomList();
+      startRoomMatch(room);
       break;
     }
 
@@ -782,6 +866,43 @@ function handleClientMessage(client, msg) {
       break;
     }
 
+    case 'rematch_vote': {
+      const room = rooms.get(client.roomId);
+      if (!room || room.status !== 'post_game') return;
+      if (typeof msg.bonusSupply === 'boolean') {
+        client.bonusSupply = msg.bonusSupply;
+      }
+      if (!room.rematchVotes) room.rematchVotes = new Set();
+      room.rematchVotes.add(client.id);
+
+      broadcastToRoom(room, {
+        type: 'rematch_vote_update',
+        votedIds: Array.from(room.rematchVotes),
+        votedCount: room.rematchVotes.size,
+        totalCount: room.players.length
+      });
+
+      if (room.rematchVotes.size >= room.players.length && room.players.length >= 2) {
+        startRoomMatch(room);
+      }
+      break;
+    }
+
+    case 'post_game_exit': {
+      const room = rooms.get(client.roomId);
+      if (room && room.status === 'post_game') {
+        dissolvePostGameRoomToLobby(room, 'player_exit', client.nickname, client.id);
+      } else if (client.roomId) {
+        leaveCurrentRoom(client);
+      }
+      sendJson(client, {
+        type: 'left_room',
+        target: msg.target || 'lobby',
+        rooms: getPublicRoomList()
+      });
+      break;
+    }
+
     case 'back_to_room': {
       const room = rooms.get(client.roomId);
       if (!room) return;
@@ -807,33 +928,73 @@ function leaveCurrentRoom(client) {
   const room = rooms.get(roomId);
   if (!room) return;
 
-  const wasPlaying = room.status === 'playing' && room.match && room.match.status === 'playing';
+  const wasPlaying = room.status === 'playing' && Boolean(room.match);
+  const wasPostGame = room.status === 'post_game';
   const leavingName = client.nickname;
-  room.players = room.players.filter((p) => p.id !== client.id);
 
-  if (room.players.length === 0) {
-    clearRoomTurnTimer(room);
-    rooms.delete(roomId);
-    broadcastRoomList();
+  if (wasPostGame) {
+    // Any player leaving during post-game selection sends all remaining players to the lobby
+    dissolvePostGameRoomToLobby(room, 'player_exit', leavingName, client.id);
     return;
   }
 
+  room.players = room.players.filter((p) => p.id !== client.id);
+
   if (wasPlaying) {
-    // Mark disconnected player's tank as eliminated so remaining 2~3 players can keep playing!
+    // Unconditional +1 loss for leaving or force-closing during an active match
+    if (room.match.status === 'playing') {
+      client.stats.losses += 1;
+    }
+
+    if (room.players.length === 0) {
+      clearRoomTurnTimer(room);
+      clearRoomRematchTimer(room);
+      rooms.delete(roomId);
+      broadcastRoomList();
+      return;
+    }
+
     const match = room.match;
     const pIdx = match.players.findIndex((p) => p.id === client.id);
     if (pIdx !== -1 && match.players[pIdx].alive) {
       match.players[pIdx].hp = 0;
       match.players[pIdx].alive = false;
+      match.players[pIdx].leftMatch = true;
       match.deathCounter = (match.deathCounter || 0) + 1;
       match.players[pIdx].deathOrder = match.deathCounter;
     }
 
-    const alivePlayers = match.players.filter((p) => p.alive);
+    // If only 1 connected player remains (e.g., 2P match or 3P/4P where others left),
+    // the remaining player immediately gets 1 win and automatically moves to the lobby!
+    if (room.players.length === 1) {
+      clearRoomTurnTimer(room);
+      clearRoomRematchTimer(room);
+      const survivor = room.players[0];
+      room.players = [];
+      room.match = null;
+      rooms.delete(roomId);
+
+      survivor.stats.wins += 1;
+      survivor.roomId = null;
+      sendJson(survivor, {
+        type: 'match_forfeit_win',
+        leaverNickname: leavingName,
+        meStats: survivor.stats,
+        rooms: getPublicRoomList()
+      });
+      broadcastRoomList();
+      return;
+    }
+
+    // 2 or more connected players remain in 3P/4P match
+    const alivePlayers = match.players.filter(
+      (p) => p.alive && room.players.some((rp) => rp.id === p.id)
+    );
     broadcastToRoom(room, {
       type: 'player_left_match',
       playerId: client.id,
       nickname: leavingName,
+      remainingCount: room.players.length,
       playersSnapshot: DaepoEngine.serializePlayers(match.players)
     });
 
@@ -856,14 +1017,23 @@ function leaveCurrentRoom(client) {
       });
       scheduleRoomTurnTimer(room, 300);
     }
-  } else {
-    sendWaitingRoomUpdate(room);
-    broadcastToRoom(room, {
-      type: 'room_notice',
-      text: `🚪 ${leavingName}님이 퇴장했습니다. (현재 ${room.players.length}명)`
-    });
+    broadcastRoomList();
+    return;
   }
 
+  if (room.players.length === 0) {
+    clearRoomTurnTimer(room);
+    clearRoomRematchTimer(room);
+    rooms.delete(roomId);
+    broadcastRoomList();
+    return;
+  }
+
+  sendWaitingRoomUpdate(room);
+  broadcastToRoom(room, {
+    type: 'room_notice',
+    text: `🚪 ${leavingName}님이 퇴장했습니다. (현재 ${room.players.length}명)`
+  });
   broadcastRoomList();
 }
 
