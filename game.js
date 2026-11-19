@@ -1333,6 +1333,9 @@
         if (app.screen !== 'game' || !app.localEngineMatch) return;
         const result = Engine.executeTurnAction(app.localEngineMatch, aiPlan);
         if (result) {
+          if (aiPlan.aiScatterStepIndex) {
+            result.aiScatterStepIndex = aiPlan.aiScatterStepIndex;
+          }
           playTurnResultAnimation(result, () => {
             if (app.localEngineMatch.status === 'finished') {
               handleSingleMatchFinished();
@@ -1715,10 +1718,24 @@
         app.mode === 'single'
           ? !(shooter && shooter.isAi)
           : Boolean(shooter && shooter.id === app.myClientId);
+      const maxScatterUses = Engine.MAX_SCATTER_USES || 5;
+      const shooterScatterLeft =
+        shooter && typeof shooter.scatterUsesLeft === 'number'
+          ? shooter.scatterUsesLeft
+          : maxScatterUses;
       const canScatterThisShell =
         isMyShot &&
+        shooterScatterLeft > 0 &&
         !proj.isScattered &&
         (wpnId === 'normal' || wpnId === 'double' || wpnId === 'power');
+      const aiAutoScatterStep =
+        shooter &&
+        shooter.isAi &&
+        shooterScatterLeft > 0 &&
+        currentShotIndex === 0 &&
+        curResult.aiScatterStepIndex
+          ? curResult.aiScatterStepIndex
+          : null;
 
       app.activeShell = {
         points: pts,
@@ -1728,6 +1745,7 @@
         shotIndex: currentShotIndex,
         shotNumber: projIdx,
         canScatter: canScatterThisShell,
+        aiScatterStepIndex: aiAutoScatterStep,
         isScattered: false,
         subShells: null,
         head: { x: startPt.x, y: startPt.y, angle: initAng },
@@ -1836,6 +1854,23 @@
   function transitionActiveShellToScatter(scatterResult) {
     if (!app.renderMatch || !scatterResult) return;
     app.currentTurnAnimResult = scatterResult;
+
+    // Immediately sync shooter's decremented scatterUsesLeft (5 -> 4 -> ... -> 0) on renderMatch
+    if (scatterResult.playersSnapshot) {
+      const snapShooter = scatterResult.playersSnapshot.find(
+        (p) => p.id === scatterResult.shooterId
+      );
+      const renderShooter = app.renderMatch.players.find(
+        (p) => p.id === scatterResult.shooterId
+      );
+      if (
+        snapShooter &&
+        renderShooter &&
+        typeof snapShooter.scatterUsesLeft === 'number'
+      ) {
+        renderShooter.scatterUsesLeft = snapShooter.scatterUsesLeft;
+      }
+    }
 
     const scatProj =
       (scatterResult.projectiles || []).find((p) => p.isScattered && p.subProjectiles) ||
@@ -2439,11 +2474,22 @@
       fireBtn.querySelector('.fire-txt').textContent = isHeal ? '수리!' : '발사!';
     }
 
-    // Scatter ("산개") Button: disabled normally, enabled ONLY while my normal/double/power shell is flying in mid-air!
+    // Scatter ("산개") Button: max 5 uses per match, disabled normally & when 5 uses are exhausted,
+    // enabled ONLY while my normal/double/power shell is flying in mid-air and uses remain!
     const scatterBtn = document.getElementById('btn-scatter');
+    const scatterCntEl = document.getElementById('lbl-scatter-cnt');
+    const maxScatter = Engine.MAX_SCATTER_USES || 5;
+    const myScatterLeft =
+      typeof myTank.scatterUsesLeft === 'number' ? myTank.scatterUsesLeft : maxScatter;
+    if (scatterCntEl) {
+      scatterCntEl.textContent = `${Math.max(0, myScatterLeft)}/${maxScatter}회`;
+    }
     if (scatterBtn) {
       const canScatterNow = Boolean(
-        app.activeShell && app.activeShell.canScatter && !app.activeShell.isScattered
+        myScatterLeft > 0 &&
+          app.activeShell &&
+          app.activeShell.canScatter &&
+          !app.activeShell.isScattered
       );
       scatterBtn.disabled = !canScatterNow;
       scatterBtn.classList.toggle('scatter-armed', canScatterNow);
@@ -2641,6 +2687,26 @@
         // Smooth horizontal camera scroll following projectile!
         if (app.camera.mode === 'followShell') {
           centerCameraOnWorldX(curX, false);
+        }
+
+        // If AI scheduled a mid-air 5-way scatter ("산개") at this point in flight, trigger it now!
+        if (
+          sh.aiScatterStepIndex &&
+          sh.cursor >= sh.aiScatterStepIndex &&
+          app.mode === 'single' &&
+          app.localEngineMatch
+        ) {
+          const aiSplitStep = sh.aiScatterStepIndex;
+          sh.aiScatterStepIndex = null;
+          const aiScatterRes = Engine.executeScatterOnLastTurn(
+            app.localEngineMatch,
+            aiSplitStep,
+            sh.shotIndex || 0
+          );
+          if (aiScatterRes) {
+            transitionActiveShellToScatter(aiScatterRes);
+            return;
+          }
         }
 
         if (sh.cursor >= maxIdx) {

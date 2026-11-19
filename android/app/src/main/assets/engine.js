@@ -24,6 +24,7 @@
   const TURN_FUEL_DEFAULT = 120;
   const MAX_AI_LEVEL = 30;
   const WIND_CHANGE_ROUNDS = 3; // 모든 참가 탱크가 3턴(3라운드) 진행할 때마다 바람 변경
+  const MAX_SCATTER_USES = 5; // 게임당 산개 기술 최대 사용 횟수 (AI 및 모든 유저 동일 5회)
 
   function getAiLevelSpec(rawLevel) {
     const level = clamp(Math.round(Number(rawLevel) || 1), 1, MAX_AI_LEVEL);
@@ -559,6 +560,7 @@
         alive: true,
         selectedWeapon: 'normal',
         ammo: initAmmo,
+        scatterUsesLeft: MAX_SCATTER_USES,
         damageDealt: 0,
         kills: 0,
         deathOrder: 0,
@@ -1139,7 +1141,16 @@
 
     const canScatterWeapon =
       weaponId === 'normal' || weaponId === 'double' || weaponId === 'power';
-    const scatterSpec = canScatterWeapon && action.scatterSpec ? action.scatterSpec : null;
+    const hasScatterUses =
+      typeof shooter.scatterUsesLeft !== 'number' || shooter.scatterUsesLeft > 0;
+    const scatterSpec =
+      canScatterWeapon && hasScatterUses && action.scatterSpec ? action.scatterSpec : null;
+
+    if (scatterSpec) {
+      const curLeft =
+        typeof shooter.scatterUsesLeft === 'number' ? shooter.scatterUsesLeft : MAX_SCATTER_USES;
+      shooter.scatterUsesLeft = Math.max(0, curLeft - 1);
+    }
 
     const shotCount = weapon.shots || 1;
     for (let s = 0; s < shotCount; s++) {
@@ -1304,6 +1315,14 @@
     const snap = match.lastPreTurnState;
     const wId = snap.lastAction && snap.lastAction.weapon;
     if (wId !== 'normal' && wId !== 'double' && wId !== 'power') return null;
+    const snapShooter = snap.players && snap.players[snap.turnIndex];
+    if (
+      snapShooter &&
+      typeof snapShooter.scatterUsesLeft === 'number' &&
+      snapShooter.scatterUsesLeft <= 0
+    ) {
+      return null;
+    }
 
     match.terrain = new Float32Array(snap.terrain);
     match.players = JSON.parse(JSON.stringify(snap.players));
@@ -1584,6 +1603,39 @@
       }
     }
 
+    // AI can also tactically use mid-air 5-way scatter ("산개") up to 5 times per match!
+    let aiScatterStepIndex = null;
+    const aiScatterLeft =
+      typeof ai.scatterUsesLeft === 'number' ? ai.scatterUsesLeft : MAX_SCATTER_USES;
+    if (
+      aiScatterLeft > 0 &&
+      (weapon === 'normal' || weapon === 'double' || weapon === 'power') &&
+      rng() < 0.36
+    ) {
+      const previewTrace = traceProjectile(match, ai, chosenAngle, chosenPower, match.wind);
+      if (previewTrace && previewTrace.points && previewTrace.points.length >= 10) {
+        // Pick the mid-air point where the shell is descending or passing over the target region
+        const goalX = target.x - ai.facing * 42;
+        let bestStep = -1;
+        let bestDist = Infinity;
+        const minStep = Math.max(3, Math.floor(previewTrace.points.length * 0.35));
+        const maxStep = Math.max(minStep, previewTrace.points.length - 3);
+        for (let k = minStep; k <= maxStep; k++) {
+          const pt = previewTrace.points[k];
+          if (pt.y > target.y - 28) continue; // must still be airborne above target
+          const d = Math.abs(pt.x - goalX);
+          if (d < bestDist) {
+            bestDist = d;
+            bestStep = k;
+          }
+        }
+        if (bestStep >= 3 && bestDist <= 180) {
+          aiScatterStepIndex = bestStep;
+          aiStageNote += ` · 💥산개(${aiScatterLeft}/5)`;
+        }
+      }
+    }
+
     return {
       moves,
       facing: ai.facing,
@@ -1591,6 +1643,7 @@
       power: chosenPower,
       weapon,
       aiTargetId: target.id,
+      aiScatterStepIndex,
       aiNote: aiStageNote
     };
   }
@@ -1649,6 +1702,8 @@
       alive: p.alive,
       selectedWeapon: p.selectedWeapon,
       ammo: { ...p.ammo },
+      scatterUsesLeft:
+        typeof p.scatterUsesLeft === 'number' ? p.scatterUsesLeft : MAX_SCATTER_USES,
       damageDealt: p.damageDealt,
       kills: p.kills,
       deathOrder: p.deathOrder
@@ -1691,6 +1746,7 @@
     TURN_FUEL_DEFAULT,
     MAX_AI_LEVEL,
     WIND_CHANGE_ROUNDS,
+    MAX_SCATTER_USES,
     PLAYER_PALETTE,
     TANK_TYPES,
     WEAPONS,

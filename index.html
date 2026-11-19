@@ -13,7 +13,7 @@
   <link rel="Shortcut Icon" href="favicon.ico" />
   <link rel="apple-touch-icon" href="icon-192.png" />
   <title>탱크 클래시 (Tank Clash) - 1~4인 턴제 대포 게임</title>
-  <link rel="stylesheet" href="style.css?v=16" />
+  <link rel="stylesheet" href="style.css?v=17" />
 </head>
 <body>
   <div class="app-shell">
@@ -765,17 +765,17 @@
             <button id="btn-angle-up" class="pad-btn sm" type="button">▲</button>
           </div>
 
-          <!-- 2-B. Mid-Air 5-Way Scatter (산개) Button -->
+          <!-- 2-B. Mid-Air 5-Way Scatter (산개) Button (5 uses per match) -->
           <button
             id="btn-scatter"
             class="scatter-btn"
             type="button"
             disabled
-            title="일반탄·더블샷·고폭탄 발사 후 비행 중 누르면 5발로 분리되어 아래로 산개합니다 (1발당 파괴력 20%)"
+            title="일반탄·더블샷·고폭탄 발사 후 비행 중 누르면 5발로 분리되어 아래로 산개합니다 (1발당 파괴력 20% · 게임당 5회 제한)"
           >
             <span class="scatter-ico">💥</span>
             <span class="scatter-txt">산개</span>
-            <small class="scatter-sub">5분할</small>
+            <small id="lbl-scatter-cnt" class="scatter-sub">5/5회</small>
           </button>
 
           <!-- 3. Power Bar + Fire Button -->
@@ -890,7 +890,7 @@
     </div>
   </div>
 
-  <script src="engine.js?v=16"></script>
-  <script src="game.js?v=16"></script>
+  <script src="engine.js?v=17"></script>
+  <script src="game.js?v=17"></script>
 </body>
 </html>
