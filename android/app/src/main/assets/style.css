@@ -1612,9 +1612,9 @@ input {
 
 .controls-main-row {
   display: grid;
-  grid-template-columns: auto auto 1fr;
-  align-items: center;
-  gap: 10px;
+  grid-template-columns: auto auto auto 1fr;
+  align-items: stretch;
+  gap: 8px;
 }
 
 .ctrl-group {
@@ -2800,8 +2800,8 @@ input {
   }
 
   .controls-main-row {
-    grid-template-columns: minmax(0, 1.12fr) minmax(0, 0.88fr);
-    gap: 6px;
+    grid-template-columns: minmax(0, 1.06fr) minmax(0, 0.86fr) auto;
+    gap: 5px;
   }
 
   .ctrl-group {
@@ -3397,5 +3397,104 @@ input {
   }
   .turn-cd-track {
     height: 5px;
+  }
+  .scatter-btn {
+    min-width: 52px;
+    padding: 3px 6px;
+  }
+  .scatter-sub {
+    display: none;
+  }
+}
+
+/* ==========================================
+   MID-AIR 5-WAY SCATTER ("산개") BUTTON
+   ========================================== */
+@keyframes scatterArmedPulse {
+  0% {
+    box-shadow: 0 0 8px rgba(245, 158, 11, 0.55), 0 0 18px rgba(239, 68, 68, 0.45);
+    transform: scale(1);
+  }
+  100% {
+    box-shadow: 0 0 16px rgba(250, 204, 21, 0.95), 0 0 26px rgba(249, 115, 22, 0.85);
+    transform: scale(1.04);
+  }
+}
+
+.scatter-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  min-width: 62px;
+  padding: 5px 10px;
+  border-radius: 12px;
+  border: 1.5px solid rgba(148, 163, 184, 0.32);
+  background: linear-gradient(135deg, #f59e0b 0%, #ea580c 55%, #dc2626 100%);
+  color: #ffffff;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: transform 0.1s, opacity 0.15s, filter 0.15s;
+}
+
+.scatter-btn:disabled {
+  background: rgba(30, 41, 59, 0.85);
+  border-color: rgba(100, 116, 139, 0.28);
+  color: #64748b;
+  box-shadow: none;
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.scatter-btn.scatter-armed:not(:disabled) {
+  border-color: #fef08a;
+  color: #ffffff;
+  opacity: 1 !important;
+  animation: scatterArmedPulse 0.42s infinite alternate;
+  z-index: 25;
+}
+
+.scatter-btn:active:not(:disabled) {
+  transform: scale(0.93);
+}
+
+.scatter-ico {
+  font-size: 1.02rem;
+  line-height: 1;
+}
+
+.scatter-txt {
+  font-size: 0.78rem;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+  line-height: 1.1;
+}
+
+.scatter-sub {
+  font-size: 0.59rem;
+  font-weight: 800;
+  color: #fde68a;
+  line-height: 1;
+}
+
+.scatter-btn:disabled .scatter-sub {
+  color: #64748b;
+}
+
+@media (max-width: 680px) {
+  .scatter-btn {
+    min-width: 52px;
+    padding: 4px 6px;
+    border-radius: 10px;
+  }
+  .scatter-ico {
+    font-size: 0.9rem;
+  }
+  .scatter-txt {
+    font-size: 0.72rem;
+  }
+  .scatter-sub {
+    font-size: 0.55rem;
   }
 }

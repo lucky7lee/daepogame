@@ -1605,6 +1605,8 @@
     }
 
     app.isAnimatingTurn = true;
+    app.currentTurnAnimResult = result;
+    app.currentTurnAnimCallback = onComplete || null;
     syncControlDeckUI();
 
     const shooter = app.renderMatch.players.find((p) => p.id === result.shooterId);
@@ -1636,7 +1638,9 @@
       }
       setTimeout(() => {
         applyPostTurnSnapshot(result);
-        if (onComplete) onComplete();
+        const cb = app.currentTurnAnimCallback;
+        app.currentTurnAnimCallback = null;
+        if (cb) cb();
       }, 950);
       return;
     }
@@ -1645,29 +1649,36 @@
     const projectiles = result.projectiles || [];
     if (projectiles.length === 0) {
       applyPostTurnSnapshot(result);
-      if (onComplete) onComplete();
+      const cb = app.currentTurnAnimCallback;
+      app.currentTurnAnimCallback = null;
+      if (cb) cb();
       return;
     }
 
     let projIdx = 0;
 
     function runNextProjectile() {
-      if (!app.renderMatch || projIdx >= projectiles.length) {
+      const curResult = app.currentTurnAnimResult || result;
+      const curProjectiles = curResult.projectiles || [];
+      if (!app.renderMatch || projIdx >= curProjectiles.length) {
         setTimeout(() => {
-          applyPostTurnSnapshot(result);
-          if (onComplete) onComplete();
+          applyPostTurnSnapshot(app.currentTurnAnimResult || result);
+          const cb = app.currentTurnAnimCallback;
+          app.currentTurnAnimCallback = null;
+          if (cb) cb();
         }, 680);
         return;
       }
 
-      const proj = projectiles[projIdx++];
+      const currentShotIndex = projIdx;
+      const proj = curProjectiles[projIdx++];
       const pts = proj.points || [];
       if (pts.length === 0) {
         runNextProjectile();
         return;
       }
 
-      const wpnId = result.weaponId || 'normal';
+      const wpnId = curResult.weaponId || 'normal';
       playCannonFireSound(wpnId);
       startShellFlightSound(wpnId, pts.length);
       app.camera.mode = 'followShell';
@@ -1700,16 +1711,31 @@
       const initAng =
         pts.length > 1 ? Math.atan2(pts[1].y - pts[0].y, pts[1].x - pts[0].x) : 0;
 
+      const isMyShot =
+        app.mode === 'single'
+          ? !(shooter && shooter.isAi)
+          : Boolean(shooter && shooter.id === app.myClientId);
+      const canScatterThisShell =
+        isMyShot &&
+        !proj.isScattered &&
+        (wpnId === 'normal' || wpnId === 'double' || wpnId === 'power');
+
       app.activeShell = {
         points: pts,
         cursor: 0,
         weaponId: wpnId,
+        shooterId: curResult.shooterId,
+        shotIndex: currentShotIndex,
         shotNumber: projIdx,
+        canScatter: canScatterThisShell,
+        isScattered: false,
+        subShells: null,
         head: { x: startPt.x, y: startPt.y, angle: initAng },
         trail: [{ x: startPt.x, y: startPt.y, angle: initAng }],
         onImpact: () => {
           stopShellFlightSound();
           app.activeShell = null;
+          syncControlDeckUI();
 
           // Carve crater right at the exact impact moment!
           if (proj.craterRadius > 0) {
@@ -1764,8 +1790,8 @@
           }
 
           // Practice mode target hit feedback
-          if (result.practiceHits && result.practiceHits.length > 0 && projIdx === 1) {
-            for (const ph of result.practiceHits) {
+          if (curResult.practiceHits && curResult.practiceHits.length > 0 && projIdx === 1) {
+            for (const ph of curResult.practiceHits) {
               spawnExplosionVisual(ph.x, ph.y, 44, false);
               app.floatingTexts.push({
                 x: ph.x,
@@ -1779,12 +1805,207 @@
           }
 
           syncPlayersStripUI();
-          setTimeout(runNextProjectile, projectiles.length > 1 ? 320 : 120);
+          setTimeout(runNextProjectile, curProjectiles.length > 1 ? 320 : 120);
         }
       };
+      syncControlDeckUI();
     }
 
     runNextProjectile();
+  }
+
+  function playClusterSplitSound() {
+    const ctx = ensureAudio();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+    const freqs = [620, 880, 1180, 1480, 1760];
+    freqs.forEach((f, i) => {
+      const osc = ctx.createOscillator();
+      const g = ctx.createGain();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(f, now + i * 0.018);
+      osc.frequency.exponentialRampToValueAtTime(f * 0.42, now + i * 0.018 + 0.11);
+      g.gain.setValueAtTime(0.11, now + i * 0.018);
+      g.gain.exponentialRampToValueAtTime(0.001, now + i * 0.018 + 0.12);
+      osc.connect(g).connect(ctx.destination);
+      osc.start(now + i * 0.018);
+      osc.stop(now + i * 0.018 + 0.125);
+    });
+  }
+
+  function transitionActiveShellToScatter(scatterResult) {
+    if (!app.renderMatch || !scatterResult) return;
+    app.currentTurnAnimResult = scatterResult;
+
+    const scatProj =
+      (scatterResult.projectiles || []).find((p) => p.isScattered && p.subProjectiles) ||
+      (scatterResult.projectiles || [])[0];
+    if (!scatProj || !scatProj.subProjectiles || scatProj.subProjectiles.length === 0) return;
+
+    const wpnId = scatterResult.weaponId || 'normal';
+    const splitX = scatProj.splitX;
+    const splitY = scatProj.splitY;
+
+    playClusterSplitSound();
+    app.camera.shake = Math.max(app.camera.shake, 7);
+    app.explosions.push({
+      x: splitX,
+      y: splitY,
+      maxR: 46,
+      age: 0,
+      dur: 0.4,
+      kind: 'power',
+      color: '#fbbf24'
+    });
+    for (let i = 0; i < 20; i++) {
+      const ang = (Math.PI * 2 * i) / 20;
+      const spd = 60 + Math.random() * 120;
+      app.particles.push({
+        x: splitX,
+        y: splitY,
+        vx: Math.cos(ang) * spd,
+        vy: Math.sin(ang) * spd,
+        r: 2.2 + Math.random() * 2.5,
+        color: i % 2 === 0 ? '#fde047' : '#fb923c',
+        life: 0.42,
+        maxLife: 0.42,
+        gravity: 160
+      });
+    }
+    app.floatingTexts.push({
+      x: splitX,
+      y: splitY - 18,
+      text: '💥 5연발 산개! (1/5 화력×5)',
+      color: '#fde047',
+      age: 0,
+      dur: 1.25
+    });
+
+    const subShells = scatProj.subProjectiles.map((sp, idx) => {
+      const pts = sp.points && sp.points.length > 0 ? sp.points : [{ x: splitX, y: splitY }];
+      const p0 = pts[0];
+      const initAng =
+        pts.length > 1 ? Math.atan2(pts[1].y - pts[0].y, pts[1].x - pts[0].x) : Math.PI * 0.5;
+      return {
+        subIndex: idx,
+        points: pts,
+        cursor: 0,
+        done: false,
+        head: { x: p0.x, y: p0.y, angle: initAng },
+        trail: [{ x: p0.x, y: p0.y, angle: initAng }],
+        projData: sp
+      };
+    });
+
+    app.activeShell = {
+      isScattered: true,
+      canScatter: false,
+      weaponId: wpnId,
+      shooterId: scatterResult.shooterId,
+      shotIndex: scatterResult.scatterShotIndex || 0,
+      points: scatProj.points || [],
+      cursor: Math.max(0, (scatProj.points || []).length - 1),
+      head: { x: splitX, y: splitY, angle: Math.PI * 0.5 },
+      trail: [{ x: splitX, y: splitY, angle: Math.PI * 0.5 }],
+      subShells,
+      onSubShellImpact: (sub) => {
+        const sp = sub.projData;
+        if (!sp || !app.renderMatch) return;
+
+        if (sp.craterRadius > 0) {
+          Engine.carveCrater(app.renderMatch.terrain, sp.hitX, sp.hitY, sp.craterRadius);
+          for (const p of app.renderMatch.players) {
+            if (!p.alive) continue;
+            p.y = Engine.getTerrainY(app.renderMatch.terrain, p.x);
+          }
+        }
+
+        if (sp.hitType === 'water') {
+          playWaterSplashSound();
+        } else if (sp.hitType !== 'out') {
+          spawnExplosionVisual(sp.hitX, sp.hitY, sp.craterRadius || 22, wpnId);
+        }
+
+        if (sp.damages && sp.damages.length > 0) {
+          for (const d of sp.damages) {
+            const victim = app.renderMatch.players.find((p) => p.id === d.playerId);
+            if (victim && !d.sank) {
+              victim.hp = Math.max(0, victim.hp - d.damage);
+              if (d.killed) victim.alive = false;
+            } else if (victim && d.sank) {
+              victim.hp = 0;
+              victim.alive = false;
+            }
+            app.floatingTexts.push({
+              x: d.x + (sub.subIndex - 2) * 12,
+              y: d.y - 14 - (sub.subIndex % 2) * 14,
+              text: d.sank ? '🌊 수장 격파!' : d.killed ? `💥 -${d.damage} 격파!` : `-${d.damage}`,
+              color: d.killed ? '#fbbf24' : '#fb923c',
+              age: 0,
+              dur: 1.35
+            });
+          }
+        }
+        syncPlayersStripUI();
+      },
+      onAllSubShellsDone: () => {
+        stopShellFlightSound();
+        app.activeShell = null;
+        syncControlDeckUI();
+
+        if (scatterResult.practiceHits && scatterResult.practiceHits.length > 0) {
+          for (const ph of scatterResult.practiceHits) {
+            spawnExplosionVisual(ph.x, ph.y, 32, false);
+            app.floatingTexts.push({
+              x: ph.x,
+              y: ph.y - 24,
+              text: `🎯 산개 명중! +${ph.points}점`,
+              color: '#fde047',
+              age: 0,
+              dur: 1.5
+            });
+          }
+        }
+
+        setTimeout(() => {
+          applyPostTurnSnapshot(scatterResult);
+          const cb = app.currentTurnAnimCallback;
+          app.currentTurnAnimCallback = null;
+          if (cb) cb();
+        }, 680);
+      }
+    };
+
+    syncControlDeckUI();
+  }
+
+  function triggerPlayerScatter() {
+    if (!app.activeShell || !app.activeShell.canScatter || app.activeShell.isScattered) return;
+    const sh = app.activeShell;
+    const maxSplit = Math.max(1, sh.points.length - 2);
+    const splitStepIndex = Engine.clamp(Math.floor(sh.cursor), 1, maxSplit);
+    const shotIndex = sh.shotIndex || 0;
+
+    sh.canScatter = false;
+    syncControlDeckUI();
+
+    if (app.mode === 'single') {
+      if (!app.localEngineMatch) return;
+      const scatterResult = Engine.executeScatterOnLastTurn(
+        app.localEngineMatch,
+        splitStepIndex,
+        shotIndex
+      );
+      if (scatterResult) {
+        transitionActiveShellToScatter(scatterResult);
+      }
+    } else {
+      netSend({
+        type: 'scatter_turn',
+        splitStepIndex,
+        shotIndex
+      });
+    }
   }
 
   function applyPostTurnSnapshot(result) {
@@ -2218,6 +2439,16 @@
       fireBtn.querySelector('.fire-txt').textContent = isHeal ? '수리!' : '발사!';
     }
 
+    // Scatter ("산개") Button: disabled normally, enabled ONLY while my normal/double/power shell is flying in mid-air!
+    const scatterBtn = document.getElementById('btn-scatter');
+    if (scatterBtn) {
+      const canScatterNow = Boolean(
+        app.activeShell && app.activeShell.canScatter && !app.activeShell.isScattered
+      );
+      scatterBtn.disabled = !canScatterNow;
+      scatterBtn.classList.toggle('scatter-armed', canScatterNow);
+    }
+
     const lblFacing = document.getElementById('lbl-facing');
     if (lblFacing) lblFacing.textContent = myTank.facing < 0 ? '◀ 좌' : '우 ▶';
 
@@ -2322,44 +2553,100 @@
       }
     }
 
-    // Flying Projectile Playback (Sub-frame interpolated position + tangent velocity orientation)
+    // Flying Projectile Playback (Single shell or 5 mid-air scattered sub-shells)
     if (app.activeShell) {
       const sh = app.activeShell;
-      sh.cursor += dt * 46;
-      const maxIdx = sh.points.length - 1;
-      const clampedCursor = Math.min(maxIdx, sh.cursor);
-      const idx = Math.floor(clampedCursor);
-      const nextIdx = Math.min(maxIdx, idx + 1);
-      const frac = clampedCursor - idx;
+      if (sh.isScattered && sh.subShells && sh.subShells.length > 0) {
+        let activeCount = 0;
+        let sumX = 0;
+        let sumY = 0;
+        for (const sub of sh.subShells) {
+          if (sub.done) continue;
+          sub.cursor += dt * 46;
+          const maxIdx = sub.points.length - 1;
+          const clampedCursor = Math.min(maxIdx, sub.cursor);
+          const idx = Math.floor(clampedCursor);
+          const nextIdx = Math.min(maxIdx, idx + 1);
+          const frac = clampedCursor - idx;
 
-      const p0 = sh.points[idx];
-      const p1 = sh.points[nextIdx];
-      const curX = p0.x + (p1.x - p0.x) * frac;
-      const curY = p0.y + (p1.y - p0.y) * frac;
+          const p0 = sub.points[idx];
+          const p1 = sub.points[nextIdx];
+          const curX = p0.x + (p1.x - p0.x) * frac;
+          const curY = p0.y + (p1.y - p0.y) * frac;
 
-      const angA = sh.points[Math.max(0, idx - 1)];
-      const angB = sh.points[Math.min(maxIdx, idx + 1)];
-      const dAngX = angB.x - angA.x;
-      const dAngY = angB.y - angA.y;
-      const curAngle =
-        Math.abs(dAngX) + Math.abs(dAngY) > 0.01
-          ? Math.atan2(dAngY, dAngX)
-          : sh.head
-          ? sh.head.angle
-          : 0;
+          const angA = sub.points[Math.max(0, idx - 1)];
+          const angB = sub.points[Math.min(maxIdx, idx + 1)];
+          const dAngX = angB.x - angA.x;
+          const dAngY = angB.y - angA.y;
+          const curAngle =
+            Math.abs(dAngX) + Math.abs(dAngY) > 0.01
+              ? Math.atan2(dAngY, dAngX)
+              : sub.head
+              ? sub.head.angle
+              : Math.PI * 0.5;
 
-      sh.head = { x: curX, y: curY, angle: curAngle };
-      sh.trail.push({ x: curX, y: curY, angle: curAngle });
-      if (sh.trail.length > 30) sh.trail.shift();
+          sub.head = { x: curX, y: curY, angle: curAngle };
+          sub.trail.push({ x: curX, y: curY, angle: curAngle });
+          if (sub.trail.length > 20) sub.trail.shift();
 
-      // Smooth horizontal camera scroll following projectile!
-      if (app.camera.mode === 'followShell') {
-        centerCameraOnWorldX(curX, false);
-      }
+          activeCount++;
+          sumX += curX;
+          sumY += curY;
 
-      if (sh.cursor >= maxIdx) {
-        const cb = sh.onImpact;
-        if (cb) cb();
+          if (sub.cursor >= maxIdx) {
+            sub.done = true;
+            if (sh.onSubShellImpact) sh.onSubShellImpact(sub);
+          }
+        }
+
+        if (activeCount > 0) {
+          const avgX = sumX / activeCount;
+          const avgY = sumY / activeCount;
+          sh.head = { x: avgX, y: avgY, angle: Math.PI * 0.5 };
+          if (app.camera.mode === 'followShell') {
+            centerCameraOnWorldX(avgX, false);
+          }
+        } else {
+          const allDoneCb = sh.onAllSubShellsDone;
+          if (allDoneCb) allDoneCb();
+        }
+      } else {
+        sh.cursor += dt * 46;
+        const maxIdx = sh.points.length - 1;
+        const clampedCursor = Math.min(maxIdx, sh.cursor);
+        const idx = Math.floor(clampedCursor);
+        const nextIdx = Math.min(maxIdx, idx + 1);
+        const frac = clampedCursor - idx;
+
+        const p0 = sh.points[idx];
+        const p1 = sh.points[nextIdx];
+        const curX = p0.x + (p1.x - p0.x) * frac;
+        const curY = p0.y + (p1.y - p0.y) * frac;
+
+        const angA = sh.points[Math.max(0, idx - 1)];
+        const angB = sh.points[Math.min(maxIdx, idx + 1)];
+        const dAngX = angB.x - angA.x;
+        const dAngY = angB.y - angA.y;
+        const curAngle =
+          Math.abs(dAngX) + Math.abs(dAngY) > 0.01
+            ? Math.atan2(dAngY, dAngX)
+            : sh.head
+            ? sh.head.angle
+            : 0;
+
+        sh.head = { x: curX, y: curY, angle: curAngle };
+        sh.trail.push({ x: curX, y: curY, angle: curAngle });
+        if (sh.trail.length > 30) sh.trail.shift();
+
+        // Smooth horizontal camera scroll following projectile!
+        if (app.camera.mode === 'followShell') {
+          centerCameraOnWorldX(curX, false);
+        }
+
+        if (sh.cursor >= maxIdx) {
+          const cb = sh.onImpact;
+          if (cb) cb();
+        }
       }
     } else if (app.camera.mode === 'followTank') {
       const active = getActivePlayer();
@@ -2546,7 +2833,7 @@
     }
 
     // 8. Active Flying Projectile + Weapon-Specific Trail (Distinct Silhouette per Shell Type!)
-    if (app.activeShell && app.activeShell.trail.length > 0) {
+    if (app.activeShell && (app.activeShell.trail.length > 0 || app.activeShell.isScattered)) {
       drawActiveProjectile(ctx, app.activeShell, nowMs);
     }
 
@@ -2645,14 +2932,33 @@
 
   // Distinct Flying Projectile & Trail Renderer per Shell Type ('normal' | 'double' | 'power' | 'teleport')
   function drawActiveProjectile(ctx, sh, nowMs) {
-    const trail = sh.trail;
-    const head = sh.head || trail[trail.length - 1];
-    if (!head) return;
+    if (sh.isScattered && sh.subShells && sh.subShells.length > 0) {
+      for (const sub of sh.subShells) {
+        if (sub.done || !sub.trail || sub.trail.length === 0) continue;
+        drawSingleProjectileBody(
+          ctx,
+          sub.trail,
+          sub.head || sub.trail[sub.trail.length - 1],
+          sh.weaponId || 'normal',
+          sub.subIndex + 1,
+          0.76,
+          nowMs
+        );
+      }
+      return;
+    }
 
-    const wpn = sh.weaponId || 'normal';
-    const pScale = isSmartphoneScreen()
+    const trail = sh.trail;
+    const head = sh.head || (trail && trail[trail.length - 1]);
+    if (!head || !trail) return;
+    drawSingleProjectileBody(ctx, trail, head, sh.weaponId || 'normal', sh.shotNumber || 1, 1.0, nowMs);
+  }
+
+  function drawSingleProjectileBody(ctx, trail, head, wpn, shotNumber, scaleMult, nowMs) {
+    const baseScale = isSmartphoneScreen()
       ? Engine.clamp(getMobileTankBoost() * 0.86, 1.28, 1.58)
       : 1.15;
+    const pScale = baseScale * (scaleMult || 1.0);
 
     ctx.save();
 
@@ -2901,7 +3207,7 @@
       ctx.stroke();
 
       // Cyan/Blue Tactical Stripe (1st vs 2nd shot accent)
-      ctx.fillStyle = sh.shotNumber === 2 ? '#a855f7' : '#0ea5e9';
+      ctx.fillStyle = shotNumber === 2 ? '#a855f7' : '#0ea5e9';
       ctx.fillRect(-3, -3.2, 4.5, 6.4);
 
       // Sharp Pointed Scarlet Nose Cone
@@ -4566,6 +4872,33 @@
       const res = Engine.executeTurnAction(r.match, msg);
       if (!res) return;
       resolveServerlessTurnResult(r, res);
+    } else if (msg.type === 'scatter_turn' && r.status === 'playing' && r.match && r.match.lastPreTurnState) {
+      const snap = r.match.lastPreTurnState;
+      const shooter = snap.players && snap.players[snap.turnIndex];
+      if (!shooter || shooter.id !== fromId) return;
+      if (r.turnTimer) {
+        clearTimeout(r.turnTimer);
+        r.turnTimer = null;
+      }
+      const scatterRes = Engine.executeScatterOnLastTurn(
+        r.match,
+        msg.splitStepIndex,
+        msg.shotIndex || 0
+      );
+      if (!scatterRes) return;
+      for (const p of r.players) {
+        sendToServerlessPeer(p.id, { type: 'turn_scattered', result: scatterRes });
+      }
+      if (r.match.status === 'finished') {
+        clearServerlessRoomTimers(r);
+        r.turnTimer = setTimeout(() => {
+          if (hostedServerlessRoom === r && r.match && r.match.status === 'finished') {
+            finalizeServerlessMatch(r);
+          }
+        }, 3400);
+      } else {
+        scheduleServerlessTurnTimer(r, 3400);
+      }
     } else if (msg.type === 'rematch_vote' && r.status === 'post_game') {
       const voter = r.players.find((x) => x.id === fromId);
       if (voter && typeof msg.bonusSupply === 'boolean') {
@@ -4814,6 +5147,12 @@
             beginTurnPhase();
           }
         });
+        break;
+
+      case 'turn_scattered':
+        if (msg.result) {
+          transitionActiveShellToScatter(msg.result);
+        }
         break;
 
       case 'player_left_match':
@@ -5674,6 +6013,14 @@
       ensureAudio();
       triggerPlayerFire();
     });
+
+    const btnScatter = document.getElementById('btn-scatter');
+    if (btnScatter) {
+      btnScatter.addEventListener('click', () => {
+        ensureAudio();
+        triggerPlayerScatter();
+      });
+    }
 
     // Game Over Modal Buttons
     const voteMultiRematch = () => {

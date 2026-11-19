@@ -408,10 +408,18 @@ function estimateShotAnimMs(turnResult) {
   }
   let maxPts = 0;
   for (const pr of turnResult.projectiles) {
-    if (pr.points && pr.points.length > maxPts) maxPts = pr.points.length;
+    let pLen = pr.points ? pr.points.length : 0;
+    if (pr.subProjectiles && pr.subProjectiles.length > 0) {
+      let maxSub = 0;
+      for (const sp of pr.subProjectiles) {
+        if (sp.points && sp.points.length > maxSub) maxSub = sp.points.length;
+      }
+      pLen += maxSub;
+    }
+    if (pLen > maxPts) maxPts = pLen;
   }
   // Each sampled point is 3/120s = 25ms in real time, plus explosion & camera pan settle
-  return Math.min(7500, maxPts * 25 + 1600);
+  return Math.min(8200, maxPts * 25 + 1700);
 }
 
 function scheduleRoomTurnTimer(room, extraDelayMs = 0) {
@@ -862,6 +870,38 @@ function handleClientMessage(client, msg) {
       });
       if (result) {
         handleRoomTurnResult(room, result);
+      }
+      break;
+    }
+
+    case 'scatter_turn': {
+      const room = rooms.get(client.roomId);
+      if (!room || room.status !== 'playing' || !room.match || !room.match.lastPreTurnState) return;
+      const snap = room.match.lastPreTurnState;
+      const shooter = snap.players && snap.players[snap.turnIndex];
+      if (!shooter || shooter.id !== client.id) return;
+
+      clearRoomTurnTimer(room);
+      const scatterResult = DaepoEngine.executeScatterOnLastTurn(
+        room.match,
+        msg.splitStepIndex,
+        msg.shotIndex || 0
+      );
+      if (scatterResult) {
+        broadcastToRoom(room, {
+          type: 'turn_scattered',
+          result: scatterResult
+        });
+        if (room.match.status === 'finished') {
+          const delayMs = estimateShotAnimMs(scatterResult);
+          room.turnTimer = setTimeout(() => {
+            if (rooms.has(room.id) && room.match && room.match.status === 'finished') {
+              finalizeMultiplayerMatch(room);
+            }
+          }, delayMs);
+        } else {
+          scheduleRoomTurnTimer(room, estimateShotAnimMs(scatterResult));
+        }
       }
       break;
     }

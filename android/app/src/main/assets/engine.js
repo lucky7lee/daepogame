@@ -464,16 +464,41 @@
     const configs = (options && options.players) || [];
     const count = configs.length;
 
-    // Distribute spawn X positions across WORLD_WIDTH with randomized jitter
-    // Shuffle spawn order slightly or spread across zones so every game feels fresh
-    const margin = 230;
-    const usable = WORLD_WIDTH - margin * 2;
+    // Distribute spawn X positions across WORLD_WIDTH with randomized distance tiers:
+    // 40% Far (멀게), 30% Medium (중간 거리), 30% Close (가까이에)
+    const minMargin = 160;
+    const maxSpanAllowed = WORLD_WIDTH - minMargin * 2;
     const zoneOrder = Array.from({ length: count }, (_, i) => i);
     for (let i = zoneOrder.length - 1; i > 0; i--) {
       const j = Math.floor(rng() * (i + 1));
       const tmp = zoneOrder[i];
       zoneOrder[i] = zoneOrder[j];
       zoneOrder[j] = tmp;
+    }
+
+    let spawnDistanceTier = 'far';
+    let spanWidth = maxSpanAllowed;
+    let spanStartX = minMargin;
+    if (count >= 2) {
+      const distRoll = rng();
+      if (distRoll < 0.4) {
+        // 40% probability: Far distance (멀게 배치)
+        spawnDistanceTier = 'far';
+        spanWidth = 1850 + rng() * 570;
+      } else if (distRoll < 0.7) {
+        // 30% probability: Medium distance (중간 거리 배치)
+        spawnDistanceTier = 'medium';
+        spanWidth = 1020 + rng() * 600;
+      } else {
+        // 30% probability: Close distance (가까이에 배치)
+        spawnDistanceTier = 'close';
+        const minClose = count === 2 ? 360 : count === 3 ? 480 : 600;
+        const maxClose = count === 2 ? 780 : count === 3 ? 900 : 1020;
+        spanWidth = minClose + rng() * (maxClose - minClose);
+      }
+      const minRequiredSpan = (count - 1) * 150;
+      spanWidth = clamp(spanWidth, minRequiredSpan, maxSpanAllowed);
+      spanStartX = minMargin + rng() * Math.max(0, maxSpanAllowed - spanWidth);
     }
 
     const players = configs.map((cfg, idx) => {
@@ -484,9 +509,14 @@
         spawnX = 320 + Math.round(rng() * 180);
       } else {
         const zone = zoneOrder[idx];
-        const base = margin + (usable * zone) / (count - 1);
-        const maxJitter = Math.min(130, usable / (count * 3.2));
-        spawnX = clamp(Math.round(base + (rng() * 2 - 1) * maxJitter), 150, WORLD_WIDTH - 150);
+        const base = spanStartX + (spanWidth * zone) / (count - 1);
+        const stepSpan = spanWidth / (count - 1);
+        const maxJitter = Math.min(90, stepSpan * 0.24);
+        spawnX = clamp(
+          Math.round(base + (rng() * 2 - 1) * maxJitter),
+          minMargin,
+          WORLD_WIDTH - minMargin
+        );
       }
       flattenSpawnPad(terrain, spawnX, 24);
       const groundY = getTerrainY(terrain, spawnX);
@@ -570,6 +600,7 @@
       aiLevel,
       rngState: Math.floor(rng() * 2147483640) + 1,
       mapType,
+      spawnDistanceTier,
       terrain,
       wind,
       turnIndex: 0,
@@ -726,20 +757,24 @@
     return events;
   }
 
-  // Simulate a single projectile flight using parabolic equation + wind acceleration
-  // x(t) = x0 + vx0 * t + 0.5 * ax * t^2
-  // y(t) = y0 + vy0 * t + 0.5 * g * t^2
-  function traceProjectile(match, shooter, angleDeg, powerVal, windVal) {
-    const muzzle = getMuzzlePosition(shooter, match.terrain, angleDeg);
-    const speed = clamp(powerVal, 8, 100) * POWER_VELOCITY_SCALE;
-    const rad = (angleDeg * Math.PI) / 180;
-    let vx = Math.cos(rad) * shooter.facing * speed;
-    let vy = -Math.sin(rad) * speed;
+  // Simulate a single projectile flight from arbitrary position & velocity
+  function traceProjectileFromPosition(
+    match,
+    shooter,
+    startX,
+    startY,
+    startVx,
+    startVy,
+    windVal,
+    ignoreSelfSteps = 22
+  ) {
+    let vx = startVx;
+    let vy = startVy;
     const ax = windVal * WIND_ACCEL_SCALE;
     const ay = GRAVITY;
 
-    let x = muzzle.x;
-    let y = muzzle.y;
+    let x = startX;
+    let y = startY;
 
     const dt = 1 / 120;
     const maxTime = 11.0;
@@ -762,25 +797,22 @@
         points.push({ x: +x.toFixed(1), y: +y.toFixed(1) });
       }
 
-      // Left/Right out of bounds
       if (x < -80 || x > WORLD_WIDTH + 80 || y > WORLD_HEIGHT + 40) {
         hitType = 'out';
         break;
       }
 
-      // Water surface hit
       if (y >= WATER_LEVEL && (x < 0 || x > WORLD_WIDTH || getTerrainY(match.terrain, x) >= WATER_LEVEL)) {
         hitType = 'water';
         y = WATER_LEVEL;
         break;
       }
 
-      // Check direct hit with tanks (ignore self for initial 0.16s so barrel doesn't self-clip)
       if (x >= 0 && x <= WORLD_WIDTH) {
         let hitPlayer = null;
         for (const p of match.players) {
           if (!p.alive) continue;
-          if (p.id === shooter.id && step < 22) continue;
+          if (p.id === shooter.id && step < ignoreSelfSteps) continue;
           const cx = p.x;
           const cy = p.y - 13;
           const dx = x - cx;
@@ -796,7 +828,6 @@
           break;
         }
 
-        // Practice targets in 1P mode
         if (match.isPractice && match.practiceTargets) {
           let hitTgt = null;
           for (const tgt of match.practiceTargets) {
@@ -814,7 +845,6 @@
           }
         }
 
-        // Check terrain collision
         const groundY = getTerrainY(match.terrain, x);
         if (y >= groundY) {
           y = groundY;
@@ -835,8 +865,22 @@
       hitY: +y.toFixed(1),
       hitType,
       hitTankId,
-      hitTargetId
+      hitTargetId,
+      initVx: startVx,
+      initVy: startVy
     };
+  }
+
+  // Simulate a single projectile flight using parabolic equation + wind acceleration
+  // x(t) = x0 + vx0 * t + 0.5 * ax * t^2
+  // y(t) = y0 + vy0 * t + 0.5 * g * t^2
+  function traceProjectile(match, shooter, angleDeg, powerVal, windVal) {
+    const muzzle = getMuzzlePosition(shooter, match.terrain, angleDeg);
+    const speed = clamp(powerVal, 8, 100) * POWER_VELOCITY_SCALE;
+    const rad = (angleDeg * Math.PI) / 180;
+    const vx = Math.cos(rad) * shooter.facing * speed;
+    const vy = -Math.sin(rad) * speed;
+    return traceProjectileFromPosition(match, shooter, muzzle.x, muzzle.y, vx, vy, windVal, 22);
   }
 
   // Advance turn to next alive player & check victory condition
@@ -892,11 +936,140 @@
     match.windChanged = windChanged;
   }
 
+  function applyProjectileImpact(
+    match,
+    shooter,
+    tankSpec,
+    weapon,
+    weaponId,
+    trace,
+    dmgScale,
+    craterScale,
+    craters,
+    allDamageEvents,
+    practiceHits
+  ) {
+    const projDamages = [];
+    let effectiveCraterR = 0;
+
+    if (weaponId === 'teleport') {
+      if (
+        (trace.hitType === 'terrain' || trace.hitType === 'tank') &&
+        trace.hitX >= 45 &&
+        trace.hitX <= WORLD_WIDTH - 45 &&
+        trace.hitY < WATER_LEVEL - 4
+      ) {
+        shooter.x = clamp(trace.hitX, 45, WORLD_WIDTH - 45);
+        shooter.y = getTerrainY(match.terrain, shooter.x);
+      }
+    } else if (trace.hitType === 'practice_target' && match.isPractice) {
+      const idx = match.practiceTargets.findIndex((t) => t.id === trace.hitTargetId);
+      if (idx !== -1) {
+        const oldTgt = match.practiceTargets[idx];
+        const ptsGain = Math.max(20, Math.round(100 * dmgScale));
+        match.practiceScore += ptsGain;
+        practiceHits.push({ x: oldTgt.x, y: oldTgt.y, points: ptsGain });
+        const rVal = stepMatchRng(match);
+        const subRng = mulberry32(Math.floor(rVal * 2147483640) + idx * 97);
+        match.practiceTargets[idx] = spawnPracticeTarget(match.terrain, subRng, oldTgt.slotIdx);
+      }
+    } else if (trace.hitType === 'terrain' || trace.hitType === 'tank') {
+      effectiveCraterR = Math.max(10, Math.round(weapon.craterRadius * tankSpec.craterMult * craterScale));
+      const splashR = Math.max(24, Math.round(weapon.splashRadius * (dmgScale < 1 ? 0.78 : 1.0)));
+      const aiDmgMult = shooter.isAi && shooter.aiDmgScale ? shooter.aiDmgScale : 1.0;
+      const maxDmg = weapon.baseDamage * tankSpec.dmgMult * aiDmgMult * dmgScale;
+      const minSplashDmg = dmgScale < 1 ? 1 : 4;
+
+      for (const target of match.players) {
+        if (!target.alive) continue;
+        const cx = target.x;
+        const cy = target.y - 13;
+        const dist = Math.hypot(trace.hitX - cx, trace.hitY - cy);
+        const effectiveDist = Math.max(0, dist - TANK_HIT_RADIUS * 0.65);
+
+        if (effectiveDist <= splashR) {
+          const falloff = 1 - (effectiveDist / splashR) * 0.78;
+          const dmg = Math.max(minSplashDmg, Math.round(maxDmg * falloff));
+          target.hp = Math.max(0, target.hp - dmg);
+
+          if (target.id !== shooter.id) {
+            shooter.damageDealt += dmg;
+          }
+          const killed = target.hp <= 0;
+          if (killed) {
+            eliminatePlayer(match, target);
+            if (target.id !== shooter.id) {
+              shooter.kills += 1;
+            }
+          }
+          const ev = {
+            playerId: target.id,
+            damage: dmg,
+            killed,
+            x: target.x,
+            y: target.y - 24
+          };
+          projDamages.push(ev);
+          allDamageEvents.push(ev);
+        }
+      }
+
+      if (effectiveCraterR > 0) {
+        carveCrater(match.terrain, trace.hitX, trace.hitY, effectiveCraterR);
+        craters.push({ x: trace.hitX, y: trace.hitY, r: effectiveCraterR });
+        const sinkEvents = settleTanks(match, shooter);
+        for (const sk of sinkEvents) {
+          const sinkDmg = {
+            playerId: sk.playerId,
+            damage: 999,
+            killed: true,
+            sank: true,
+            x: sk.x,
+            y: sk.y
+          };
+          projDamages.push(sinkDmg);
+          allDamageEvents.push(sinkDmg);
+        }
+      }
+    }
+
+    return {
+      projDamages,
+      craterRadius: effectiveCraterR
+    };
+  }
+
   // Execute active player's turn action (fire weapon or use heal)
   function executeTurnAction(match, action) {
     if (!match || match.status !== 'playing') return null;
     const shooter = match.players[match.turnIndex];
     if (!shooter || !shooter.alive) return null;
+
+    // Save pre-turn snapshot so mid-air 5-way scatter ("산개") can deterministically branch from the exact flight point
+    if (!action._isScatterReplay) {
+      match.lastPreTurnState = {
+        terrain: new Float32Array(match.terrain),
+        players: JSON.parse(JSON.stringify(match.players)),
+        wind: match.wind,
+        windRoundsLeft: match.windRoundsLeft,
+        windChanged: match.windChanged,
+        roundNumber: match.roundNumber,
+        turnIndex: match.turnIndex,
+        turnNumber: match.turnNumber,
+        deathCounter: match.deathCounter,
+        rngState: match.rngState,
+        status: match.status,
+        winnerId: match.winnerId,
+        practiceScore: match.practiceScore,
+        practiceTargets: JSON.parse(JSON.stringify(match.practiceTargets || [])),
+        lastAction: {
+          facing: action.facing,
+          angle: action.angle,
+          power: action.power,
+          weapon: action.weapon
+        }
+      };
+    }
 
     const tankSpec = TANK_TYPES[shooter.tankType] || TANK_TYPES.cannon;
 
@@ -964,6 +1137,10 @@
     const allDamageEvents = [];
     const practiceHits = [];
 
+    const canScatterWeapon =
+      weaponId === 'normal' || weaponId === 'double' || weaponId === 'power';
+    const scatterSpec = canScatterWeapon && action.scatterSpec ? action.scatterSpec : null;
+
     const shotCount = weapon.shots || 1;
     for (let s = 0; s < shotCount; s++) {
       let shotAngle = shooter.angle;
@@ -975,100 +1152,113 @@
       }
 
       const trace = traceProjectile(match, shooter, shotAngle, shotPower, match.wind);
-      const projDamages = [];
 
-      if (weaponId === 'teleport') {
-        if (
-          (trace.hitType === 'terrain' || trace.hitType === 'tank') &&
-          trace.hitX >= 45 &&
-          trace.hitX <= WORLD_WIDTH - 45 &&
-          trace.hitY < WATER_LEVEL - 4
-        ) {
-          shooter.x = clamp(trace.hitX, 45, WORLD_WIDTH - 45);
-          shooter.y = getTerrainY(match.terrain, shooter.x);
+      // Check if user triggered mid-air 5-way scatter ("산개") on this projectile!
+      if (scatterSpec && Number(scatterSpec.shotIndex || 0) === s && trace.points.length >= 3) {
+        const splitIdx = clamp(
+          Math.floor(Number(scatterSpec.splitStepIndex) || 1),
+          1,
+          trace.points.length - 2
+        );
+        const prePoints = trace.points.slice(0, splitIdx + 1);
+        const splitPt = trace.points[splitIdx];
+        const splitX = splitPt.x;
+        const splitY = splitPt.y;
+
+        // Elapsed time t = splitIdx * 3 * (1 / 120) = splitIdx * 0.025s
+        const elapsedT = splitIdx * 0.025;
+        const ax = match.wind * WIND_ACCEL_SCALE;
+        const ay = GRAVITY;
+        const vxCur = (trace.initVx || 0) + ax * elapsedT;
+        const vyCur = (trace.initVy || 0) + ay * elapsedT;
+
+        // Each of the 5 sub-shells deals 20% (1/5) of the weapon's destructive power!
+        // For double-shot scattered on shot 0, total double-shot damage is 2 * weapon.baseDamage, so 20% of total = 0.4 * single rocket baseDamage.
+        const perSubDmgScale = weaponId === 'double' && s === 0 ? 0.4 : 0.2;
+        const perSubCraterScale = 0.46;
+
+        const subProjectiles = [];
+        for (let m = 0; m < 5; m++) {
+          const offsetIdx = m - 2; // -2, -1, 0, +1, +2
+          const subVx = vxCur * 0.34 + offsetIdx * 68;
+          const subVy = Math.max(90, vyCur * 0.35 + 135) + Math.abs(offsetIdx) * 18;
+          const subTrace = traceProjectileFromPosition(
+            match,
+            shooter,
+            splitX,
+            splitY,
+            subVx,
+            subVy,
+            match.wind,
+            0
+          );
+          const imp = applyProjectileImpact(
+            match,
+            shooter,
+            tankSpec,
+            weapon,
+            weaponId,
+            subTrace,
+            perSubDmgScale,
+            perSubCraterScale,
+            craters,
+            allDamageEvents,
+            practiceHits
+          );
+          subProjectiles.push({
+            subIndex: m,
+            offsetIdx,
+            points: subTrace.points,
+            hitX: subTrace.hitX,
+            hitY: subTrace.hitY,
+            hitType: subTrace.hitType,
+            craterRadius: imp.craterRadius,
+            damages: imp.projDamages
+          });
         }
-      } else if (trace.hitType === 'practice_target' && match.isPractice) {
-        // Practice target hit!
-        const idx = match.practiceTargets.findIndex((t) => t.id === trace.hitTargetId);
-        if (idx !== -1) {
-          const oldTgt = match.practiceTargets[idx];
-          match.practiceScore += 100;
-          practiceHits.push({ x: oldTgt.x, y: oldTgt.y, points: 100 });
-          const rVal = stepMatchRng(match);
-          const subRng = mulberry32(Math.floor(rVal * 2147483640) + idx * 97);
-          match.practiceTargets[idx] = spawnPracticeTarget(match.terrain, subRng, oldTgt.slotIdx);
+
+        projectiles.push({
+          isScattered: true,
+          splitStepIndex: splitIdx,
+          splitX,
+          splitY,
+          points: prePoints,
+          hitX: splitX,
+          hitY: splitY,
+          hitType: 'scatter_split',
+          craterRadius: 0,
+          damages: [],
+          subProjectiles
+        });
+
+        // If double-shot was scattered into 5 sub-shells on the 1st rocket (carrying 5 x 20% = 100% of double-shot damage), stop here
+        if (weaponId === 'double' && s === 0) {
+          break;
         }
-      } else if (trace.hitType === 'terrain' || trace.hitType === 'tank') {
-        const craterR = Math.round(weapon.craterRadius * tankSpec.craterMult);
-        const splashR = weapon.splashRadius;
-        const aiDmgMult = shooter.isAi && shooter.aiDmgScale ? shooter.aiDmgScale : 1.0;
-        const maxDmg = weapon.baseDamage * tankSpec.dmgMult * aiDmgMult;
-
-        // Calculate blast damage to all alive tanks within splashRadius
-        for (const target of match.players) {
-          if (!target.alive) continue;
-          const cx = target.x;
-          const cy = target.y - 13;
-          const dist = Math.hypot(trace.hitX - cx, trace.hitY - cy);
-          const effectiveDist = Math.max(0, dist - TANK_HIT_RADIUS * 0.65);
-
-          if (effectiveDist <= splashR) {
-            const falloff = 1 - (effectiveDist / splashR) * 0.78;
-            const dmg = Math.max(4, Math.round(maxDmg * falloff));
-            target.hp = Math.max(0, target.hp - dmg);
-
-            if (target.id !== shooter.id) {
-              shooter.damageDealt += dmg;
-            }
-            const killed = target.hp <= 0;
-            if (killed) {
-              eliminatePlayer(match, target);
-              if (target.id !== shooter.id) {
-                shooter.kills += 1;
-              }
-            }
-            const ev = {
-              playerId: target.id,
-              damage: dmg,
-              killed,
-              x: target.x,
-              y: target.y - 24
-            };
-            projDamages.push(ev);
-            allDamageEvents.push(ev);
-          }
-        }
-
-        // Carve destructible terrain crater & settle tanks
-        if (craterR > 0) {
-          carveCrater(match.terrain, trace.hitX, trace.hitY, craterR);
-          craters.push({ x: trace.hitX, y: trace.hitY, r: craterR });
-          const sinkEvents = settleTanks(match, shooter);
-          for (const sk of sinkEvents) {
-            const sinkDmg = {
-              playerId: sk.playerId,
-              damage: 999,
-              killed: true,
-              sank: true,
-              x: sk.x,
-              y: sk.y
-            };
-            projDamages.push(sinkDmg);
-            allDamageEvents.push(sinkDmg);
-          }
-        }
+        continue;
       }
+
+      const imp = applyProjectileImpact(
+        match,
+        shooter,
+        tankSpec,
+        weapon,
+        weaponId,
+        trace,
+        1.0,
+        1.0,
+        craters,
+        allDamageEvents,
+        practiceHits
+      );
 
       projectiles.push({
         points: trace.points,
         hitX: trace.hitX,
         hitY: trace.hitY,
         hitType: trace.hitType,
-        craterRadius:
-          weaponId !== 'teleport' && (trace.hitType === 'terrain' || trace.hitType === 'tank')
-            ? Math.round(weapon.craterRadius * tankSpec.craterMult)
-            : 0,
-        damages: projDamages
+        craterRadius: imp.craterRadius,
+        damages: imp.projDamages
       });
     }
 
@@ -1081,6 +1271,9 @@
 
     return {
       kind: 'shot',
+      isScattered: Boolean(scatterSpec),
+      scatterShotIndex: scatterSpec ? Number(scatterSpec.shotIndex || 0) : null,
+      scatterStepIndex: scatterSpec ? Number(scatterSpec.splitStepIndex || 1) : null,
       shooterId: shooter.id,
       weaponId,
       facing: shooter.facing,
@@ -1103,6 +1296,38 @@
       practiceScore: match.practiceScore,
       practiceTargets: match.practiceTargets
     };
+  }
+
+  // Re-evaluate the just-fired turn action with mid-air 5-way scatter ("산개") at splitStepIndex
+  function executeScatterOnLastTurn(match, splitStepIndex, shotIndex = 0) {
+    if (!match || !match.lastPreTurnState) return null;
+    const snap = match.lastPreTurnState;
+    const wId = snap.lastAction && snap.lastAction.weapon;
+    if (wId !== 'normal' && wId !== 'double' && wId !== 'power') return null;
+
+    match.terrain = new Float32Array(snap.terrain);
+    match.players = JSON.parse(JSON.stringify(snap.players));
+    match.wind = snap.wind;
+    match.windRoundsLeft = snap.windRoundsLeft;
+    match.windChanged = snap.windChanged;
+    match.roundNumber = snap.roundNumber;
+    match.turnIndex = snap.turnIndex;
+    match.turnNumber = snap.turnNumber;
+    match.deathCounter = snap.deathCounter;
+    match.rngState = snap.rngState;
+    match.status = snap.status;
+    match.winnerId = snap.winnerId;
+    match.practiceScore = snap.practiceScore;
+    match.practiceTargets = JSON.parse(JSON.stringify(snap.practiceTargets || []));
+
+    return executeTurnAction(match, {
+      ...snap.lastAction,
+      _isScatterReplay: true,
+      scatterSpec: {
+        splitStepIndex: Math.max(1, Math.floor(Number(splitStepIndex) || 1)),
+        shotIndex: Math.max(0, Math.floor(Number(shotIndex) || 0))
+      }
+    });
   }
 
   // ==========================================
@@ -1434,6 +1659,7 @@
     return {
       seed: match.seed,
       mapType: match.mapType,
+      spawnDistanceTier: match.spawnDistanceTier || 'far',
       aiLevel: match.aiLevel || 1,
       terrain: Array.from(match.terrain, (v) => Math.round(v * 10) / 10),
       wind: match.wind,
@@ -1482,8 +1708,10 @@
     carveCrater,
     settleTanks,
     traceProjectile,
+    traceProjectileFromPosition,
     advanceTurnAndCheckWinner,
     executeTurnAction,
+    executeScatterOnLastTurn,
     computeAiTurn,
     serializePlayers,
     exportMatchState
