@@ -63,16 +63,22 @@ public class MainActivity extends Activity {
     @SuppressLint("SetJavaScriptEnabled")
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        try {
+            requestWindowFeature(Window.FEATURE_NO_TITLE);
+        } catch (Exception ignored) {
+        }
         super.onCreate(savedInstanceState);
-        requestWindowFeature(Window.FEATURE_NO_TITLE);
 
         // Keep screen on during artillery battles and match dark navy theme
-        Window window = getWindow();
-        if (window != null) {
-            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-            window.setStatusBarColor(Color.parseColor("#0B1220"));
-            window.setNavigationBarColor(Color.parseColor("#0B1220"));
-            window.getDecorView().setBackgroundColor(Color.parseColor("#0B1220"));
+        try {
+            Window window = getWindow();
+            if (window != null) {
+                window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+                window.setStatusBarColor(Color.parseColor("#0B1220"));
+                window.setNavigationBarColor(Color.parseColor("#0B1220"));
+                window.getDecorView().setBackgroundColor(Color.parseColor("#0B1220"));
+            }
+        } catch (Exception ignored) {
         }
 
         LinearLayout rootLayout = new LinearLayout(this);
@@ -109,18 +115,25 @@ public class MainActivity extends Activity {
         webView.setWebViewClient(new WebViewClient() {
             @Override
             public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
+                if (request == null) {
+                    return null;
+                }
                 Uri url = request.getUrl();
                 if (url != null && "appassets.androidplatform.net".equals(url.getHost())) {
                     String path = url.getPath();
                     if (path != null && path.startsWith("/assets/")) {
                         String assetPath = path.substring("/assets/".length());
+                        while (assetPath.startsWith("/")) {
+                            assetPath = assetPath.substring(1);
+                        }
                         if (assetPath.isEmpty() || assetPath.endsWith("/")) {
                             assetPath = "index.html";
                         }
                         try {
                             InputStream is = getAssets().open(assetPath);
                             String mime = getMimeType(assetPath);
-                            return new WebResourceResponse(mime, "UTF-8", is);
+                            String encoding = isBinaryMimeType(mime) ? null : "UTF-8";
+                            return new WebResourceResponse(mime, encoding, is);
                         } catch (IOException e) {
                             return new WebResourceResponse("text/plain", "UTF-8", null);
                         }
@@ -131,15 +144,25 @@ public class MainActivity extends Activity {
 
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+                if (request == null) {
+                    return false;
+                }
                 Uri url = request.getUrl();
                 if (url != null && "appassets.androidplatform.net".equals(url.getHost())) {
                     return false;
                 }
+                // Ignore background/iframe sub-resource navigations so ad or analytics frames never launch external intents
+                if (!request.isForMainFrame()) {
+                    return false;
+                }
                 if (url != null) {
-                    try {
-                        Intent browserIntent = new Intent(Intent.ACTION_VIEW, url);
-                        startActivity(browserIntent);
-                    } catch (Exception ignored) {
+                    String scheme = url.getScheme();
+                    if ("http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme)) {
+                        try {
+                            Intent browserIntent = new Intent(Intent.ACTION_VIEW, url);
+                            startActivity(browserIntent);
+                        } catch (Exception ignored) {
+                        }
                     }
                 }
                 return true;
@@ -293,6 +316,11 @@ public class MainActivity extends Activity {
                 );
             }
         });
+    }
+
+    private static boolean isBinaryMimeType(String mime) {
+        if (mime == null) return true;
+        return mime.startsWith("image/") || "application/octet-stream".equals(mime);
     }
 
     private static String getMimeType(String path) {
