@@ -2298,7 +2298,8 @@
         const maxLv = Engine.MAX_AI_LEVEL || 30;
         const curLv = Engine.clamp(Math.round(Number(app.aiLevel) || 1), 1, maxLv);
         const aiSpec = Engine.getAiLevelSpec ? Engine.getAiLevelSpec(curLv) : { tierName: 'AI' };
-        lvBadge.textContent = `LV.${curLv}/${maxLv} · ${aiSpec.tierName}`;
+        lvBadge.textContent = `LV.${curLv}/${maxLv}`;
+        lvBadge.title = `싱글 AI 대전 레벨: LV.${curLv}/${maxLv} (${aiSpec.tierName})`;
         lvBadge.classList.remove('hidden');
       } else {
         lvBadge.classList.add('hidden');

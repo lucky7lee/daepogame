@@ -1096,25 +1096,33 @@ input {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  padding: 6px 10px;
-  background: linear-gradient(180deg, rgba(19, 34, 62, 0.97), rgba(13, 25, 48, 0.97));
-  border-bottom: 1px solid rgba(56, 189, 248, 0.28);
+  gap: 10px;
+  padding: 6px 12px;
+  background: linear-gradient(180deg, rgba(19, 34, 62, 0.98), rgba(13, 25, 48, 0.98));
+  border-bottom: 1px solid rgba(56, 189, 248, 0.3);
   z-index: 15;
 }
 
-.bt-left,
+.bt-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
 .bt-right {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 7px;
+  flex: 0 0 auto;
   min-width: 0;
 }
 
 .bt-btn {
   flex: 0 0 auto;
-  padding: 6px 10px;
-  border-radius: 8px;
+  padding: 6px 11px;
+  border-radius: 9px;
   border: 1px solid rgba(148, 163, 184, 0.35);
   background: rgba(38, 56, 89, 0.92);
   color: #f8fafc;
@@ -1122,74 +1130,62 @@ input {
   font-weight: 800;
   cursor: pointer;
   white-space: nowrap;
+  transition: transform 0.1s, background 0.15s;
+}
+.bt-btn:active {
+  transform: scale(0.95);
 }
 .bt-btn.exit {
   color: #fecaca;
-  border-color: rgba(248, 113, 113, 0.42);
+  border-color: rgba(248, 113, 113, 0.45);
 }
 .bt-btn.focus {
   border-color: rgba(56, 189, 248, 0.55);
   color: #bae6fd;
 }
 
-.bt-game-brand {
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: baseline;
-  gap: 5px;
-  padding: 4px 9px;
-  border-radius: 8px;
-  background: rgba(15, 23, 42, 0.65);
-  border: 1px solid rgba(56, 189, 248, 0.32);
-  color: #f8fafc;
-  font-size: 0.76rem;
-  font-weight: 900;
-  white-space: nowrap;
-}
-
-.bt-game-brand small {
-  color: #7dd3fc;
-  font-size: 0.66rem;
-  font-weight: 800;
-  letter-spacing: 0.03em;
-}
-
 .level-pill {
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  justify-content: center;
   padding: 4px 9px;
   border-radius: 999px;
-  background: linear-gradient(135deg, rgba(245, 158, 11, 0.28), rgba(217, 119, 6, 0.22));
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.3), rgba(217, 119, 6, 0.24));
   border: 1.5px solid rgba(251, 191, 36, 0.65);
   color: #fef08a;
-  font-size: 0.74rem;
+  font-size: 0.73rem;
   font-weight: 900;
+  font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
 .turn-pill {
-  display: flex;
+  flex: 0 1 auto;
+  display: inline-flex;
   align-items: center;
   gap: 6px;
   min-width: 0;
-  max-width: 100%;
-  padding: 5px 10px;
+  max-width: 240px;
+  padding: 4px 10px;
   border-radius: 999px;
-  background: rgba(30, 58, 95, 0.92);
-  border: 1.5px solid rgba(56, 189, 248, 0.55);
+  background: rgba(30, 58, 95, 0.94);
+  border: 1.5px solid rgba(56, 189, 248, 0.58);
   color: #ffffff;
   font-size: 0.78rem;
   font-weight: 800;
   white-space: nowrap;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(2, 132, 199, 0.22);
 }
 
 #turn-badge-dot {
   flex: 0 0 auto;
+  line-height: 1;
 }
 
 #turn-player-name {
+  flex: 1 1 auto;
   min-width: 0;
   color: #fef08a;
   font-weight: 900;
@@ -2620,17 +2616,18 @@ input {
     padding-left: 7px;
   }
 
-  /* Clean 2-Row Locked Smartphone Battle Topbar */
+  /* Clean 2-Row Locked Smartphone Battle Topbar (Zero Overlap) */
   .battle-topbar {
     flex-wrap: wrap;
-    padding: 5px 8px;
-    gap: 5px 6px;
+    padding: 6px 8px;
+    gap: 6px 8px;
   }
 
   .bt-left {
     flex: 1 1 0;
     min-width: 0;
     gap: 5px;
+    overflow: hidden;
   }
 
   .bt-btn {
@@ -2638,41 +2635,37 @@ input {
     font-size: 0.72rem;
   }
 
-  .bt-game-brand {
-    padding: 4px 6px;
+  .level-pill {
+    padding: 3px 7px;
     font-size: 0.69rem;
-    gap: 3px;
-  }
-
-  .bt-game-brand small {
-    display: none;
   }
 
   .turn-pill {
-    flex: 0 1 auto;
+    flex: 1 1 auto;
     min-width: 0;
+    max-width: 100%;
     padding: 4px 8px;
-    gap: 4px;
+    gap: 5px;
     font-size: 0.73rem;
   }
 
   #turn-player-name {
-    max-width: 92px;
+    max-width: none;
   }
 
   .wind-box {
     flex: 0 0 auto;
-    padding: 3px 8px;
+    padding: 4px 8px;
     gap: 5px;
   }
 
   .wind-meter {
-    width: 44px;
+    width: 42px;
   }
 
   .wind-val {
     font-size: 0.7rem;
-    min-width: 38px;
+    min-width: 36px;
   }
 
   .bt-right {
@@ -2872,6 +2865,16 @@ input {
   .battle-topbar {
     flex-wrap: nowrap;
     padding: 3px 8px;
+    gap: 6px;
+  }
+  .bt-left {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  .turn-pill {
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: 190px;
   }
   .bt-right {
     flex: 0 0 auto;

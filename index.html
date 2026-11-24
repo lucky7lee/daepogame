@@ -13,7 +13,7 @@
   <link rel="Shortcut Icon" href="favicon.ico" />
   <link rel="apple-touch-icon" href="icon-192.png" />
   <title>탱크 클래시 (Tank Clash) - 1~4인 턴제 대포 게임</title>
-  <link rel="stylesheet" href="style.css?v=19" />
+  <link rel="stylesheet" href="style.css?v=20" />
 </head>
 <body>
   <div class="app-shell">
@@ -383,8 +383,8 @@
             <div class="guide-step-row">
               <span class="g-step-num">2</span>
               <div class="g-step-body">
-                <strong>포신 각도 조절 (▲ / ▼)</strong>
-                <p>탱크별 허용 각도 범위 내에서 포신 각도를 조절합니다. 고각 사격일수록 바람의 영향을 더 많이 받습니다.</p>
+                <strong>포신 각도 조절 (▲ / ▼) & 공중 산개 (💥)</strong>
+                <p>각도를 조절해 발사한 뒤, 일반탄·더블샷·고폭탄 비행 중 <strong>💥 산개</strong> 버튼을 누르면 포탄이 즉시 5발(1발당 화력 20%)로 분리 낙하합니다. (게임당 5회)</p>
               </div>
             </div>
             <div class="guide-step-row">
@@ -397,8 +397,8 @@
             <div class="guide-step-row">
               <span class="g-step-num">4</span>
               <div class="g-step-body">
-                <strong>파워 조절 & 발사 (🔥 발사!)</strong>
-                <p>파워 게이지(10~100)를 맞춰 발사합니다. 게이지 위의 <strong>주황색 눈금</strong>은 내 직전 턴 발사 파워를 표시해 영점 보정을 도와줍니다.</p>
+                <strong>파워 조절 & 30초 내 발사 (🔥 발사!)</strong>
+                <p>30초 제한시간 게이지가 끝나기 전에 파워(10~100)를 맞춰 발사합니다. 30초 초과 시 임의 자동 발사되며, 주황색 눈금은 내 직전 턴 파워를 표시합니다.</p>
               </div>
             </div>
           </div>
@@ -492,9 +492,9 @@
           </div>
 
           <div class="guide-wpn-notes">
-            <div class="g-wpn-note"><strong>💣 일반탄</strong>: 황금빛 화염 궤적을 그리며 날아가는 표준 철갑탄으로 탄수 제한 없이 사용할 수 있습니다.</div>
-            <div class="g-wpn-note"><strong>🚀 더블샷</strong>: 청록색 부스터를 분사하는 소형 로켓탄 2발을 연속 발사합니다. 2발 모두 명중 시 일반탄보다 높은 피해를 입힙니다.</div>
+            <div class="g-wpn-note"><strong>💣 일반탄 & 🚀 더블샷</strong>: 일반탄은 탄수 제한 없는 표준 철갑탄이며, 더블샷은 연속 2발의 로켓탄을 발사해 명중 시 높은 누적 피해를 입힙니다.</div>
             <div class="g-wpn-note"><strong>☢️ 고폭탄</strong>: 경기당 <strong>2발</strong> 지급되는 초강력 중량 탄두입니다. 넓은 폭발 반경(96px)과 거대한 크레이터(74px)를 생성합니다.</div>
+            <div class="g-wpn-note"><strong>💥 공중 5연발 산개 기술 (게임당 5회)</strong>: 일반탄·더블샷·고폭탄 비행 중 <strong>산개</strong> 버튼을 누르면 그 즉시 <strong>5발로 분리 낙하</strong>(1발당 파괴력 20%)하여 광범위 타격을 입힙니다.</div>
             <div class="g-wpn-note"><strong>🌀 이동탄 & 🔧 수리키트</strong>: 이동탄은 탄착 지점으로 내 탱크를 순간이동시키며, 수리키트는 턴을 사용해 체력을 즉시 <strong>+35 회복</strong>합니다.</div>
           </div>
         </div>
@@ -657,8 +657,7 @@
       <div class="battle-topbar">
         <div class="bt-left">
           <button id="btn-battle-exit" class="bt-btn exit" type="button">◀ 나가기</button>
-          <span class="bt-game-brand" title="탱크 클래시 (Tank Clash)">탱크 클래시 <small>Tank Clash</small></span>
-          <span id="battle-level-badge" class="level-pill hidden" title="싱글 AI 대전 레벨 (1~30레벨)">LV.1 / 30</span>
+          <span id="battle-level-badge" class="level-pill hidden" title="싱글 AI 대전 레벨 (1~30레벨)">LV.1/30</span>
           <div id="turn-indicator" class="turn-pill">
             <span id="turn-badge-dot">🔵</span>
             <span id="turn-player-name">내 턴</span>
@@ -890,7 +889,7 @@
     </div>
   </div>
 
-  <script src="engine.js?v=19"></script>
-  <script src="game.js?v=19"></script>
+  <script src="engine.js?v=20"></script>
+  <script src="game.js?v=20"></script>
 </body>
 </html>
