@@ -3,9 +3,11 @@ package io.github.lucky7lee.tankclash;
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.content.Intent;
+import android.content.res.Configuration;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.Bundle;
+import android.util.DisplayMetrics;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
@@ -209,17 +211,40 @@ public class MainActivity extends Activity {
         }
     }
 
+    private int lastBannerWidthDp = -1;
+
+    private AdSize getFullWidthAdaptiveBannerAdSize() {
+        try {
+            DisplayMetrics outMetrics = getResources().getDisplayMetrics();
+            float density = outMetrics.density > 0 ? outMetrics.density : 1.0f;
+            float adWidthPixels = bannerContainer != null ? bannerContainer.getWidth() : 0;
+            if (adWidthPixels <= 0) {
+                adWidthPixels = outMetrics.widthPixels;
+            }
+            int adWidthDp = Math.max(320, (int) (adWidthPixels / density));
+            lastBannerWidthDp = adWidthDp;
+            return AdSize.getCurrentOrientationAnchoredAdaptiveBannerAdSize(this, adWidthDp);
+        } catch (Exception ignored) {
+            return AdSize.BANNER;
+        }
+    }
+
     private void setupBannerAd() {
         if (bannerContainer == null) return;
         try {
+            if (bannerAdView != null) {
+                bannerAdView.destroy();
+                bannerAdView = null;
+            }
             bannerAdView = new AdView(this);
             bannerAdView.setAdUnitId(ADMOB_BANNER_UNIT_ID);
-            bannerAdView.setAdSize(AdSize.BANNER);
+            AdSize adaptiveSize = getFullWidthAdaptiveBannerAdSize();
+            bannerAdView.setAdSize(adaptiveSize);
 
             FrameLayout.LayoutParams adParams = new FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.WRAP_CONTENT,
-                    ViewGroup.LayoutParams.WRAP_CONTENT,
-                    Gravity.CENTER_HORIZONTAL
+                    Gravity.CENTER
             );
             bannerContainer.removeAllViews();
             bannerContainer.addView(bannerAdView, adParams);
@@ -227,6 +252,24 @@ public class MainActivity extends Activity {
             AdRequest adRequest = new AdRequest.Builder().build();
             bannerAdView.loadAd(adRequest);
         } catch (Exception ignored) {
+        }
+    }
+
+    @Override
+    public void onConfigurationChanged(@NonNull Configuration newConfig) {
+        super.onConfigurationChanged(newConfig);
+        if (bannerContainer != null) {
+            bannerContainer.post(() -> {
+                try {
+                    DisplayMetrics dm = getResources().getDisplayMetrics();
+                    float density = dm.density > 0 ? dm.density : 1.0f;
+                    int curWidthDp = Math.max(320, (int) (dm.widthPixels / density));
+                    if (curWidthDp != lastBannerWidthDp) {
+                        setupBannerAd();
+                    }
+                } catch (Exception ignored) {
+                }
+            });
         }
     }
 
