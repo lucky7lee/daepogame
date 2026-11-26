@@ -1222,13 +1222,8 @@
     syncAllBattleHud();
 
     // Start 30s turn timer (skip countdown in 1P practice mode)
-    const timerBadge = document.getElementById('turn-timer');
     const cdWrap = document.getElementById('turn-countdown-wrap');
     if (app.renderMatch.isPractice) {
-      if (timerBadge) {
-        timerBadge.textContent = `점수 ${app.renderMatch.practiceScore}`;
-        timerBadge.classList.remove('urgent');
-      }
       if (cdWrap) cdWrap.classList.add('hidden');
       return;
     }
@@ -1252,12 +1247,6 @@
     const remClamped = Math.max(0, Math.min(TURN_LIMIT_SEC, remSecFloat));
     const secCeil = Math.ceil(remClamped);
     turnSecondsLeft = secCeil;
-
-    const timerBadge = document.getElementById('turn-timer');
-    if (timerBadge) {
-      timerBadge.textContent = `${secCeil}s`;
-      timerBadge.classList.toggle('urgent', secCeil <= 5);
-    }
 
     const wrap = document.getElementById('turn-countdown-wrap');
     const fill = document.getElementById('turn-cd-fill');
@@ -2310,7 +2299,7 @@
       if (dotEl) dotEl.textContent = active.badge || '🔵';
       if (nameEl) {
         if (app.renderMatch.isPractice) {
-          nameEl.textContent = '영점 연습';
+          nameEl.textContent = `영점 연습 · ${app.renderMatch.practiceScore || 0}점`;
         } else if (app.mode === 'multi') {
           nameEl.textContent = active.id === app.myClientId ? '내 턴!' : `${active.nickname} 턴`;
         } else if (app.singleSubMode === 'ai') {
@@ -5367,7 +5356,7 @@
       canyon: '🏜️ 대계곡',
       hills: '🌿 구릉지',
       twinpeaks: '🌋 쌍봉분지',
-      terrace: '🏜️ 단차고원'
+      terrace: '🏛️ 단차고원'
     };
 
     const compactUi = isSmartphoneScreen();

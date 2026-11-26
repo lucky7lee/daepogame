@@ -1167,7 +1167,7 @@ input {
   gap: 6px;
   min-width: 0;
   max-width: 240px;
-  padding: 4px 10px;
+  padding: 5px 11px;
   border-radius: 999px;
   background: rgba(30, 58, 95, 0.94);
   border: 1.5px solid rgba(56, 189, 248, 0.58);
@@ -1192,23 +1192,6 @@ input {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.turn-timer {
-  flex: 0 0 auto;
-  background: rgba(245, 158, 11, 0.24);
-  border: 1px solid rgba(251, 191, 36, 0.5);
-  padding: 2px 7px;
-  border-radius: 999px;
-  color: #fde047;
-  font-weight: 900;
-  font-variant-numeric: tabular-nums;
-}
-.turn-timer.urgent {
-  background: rgba(239, 68, 68, 0.35);
-  border-color: rgba(248, 113, 113, 0.65);
-  color: #fecaca;
-  animation: pulseFast 0.6s infinite alternate;
 }
 
 /* Wind Meter */
@@ -2852,6 +2835,102 @@ input {
     height: 48px;
     min-width: 76px;
     padding: 0 12px;
+  }
+}
+
+/* ==========================================
+   ULTRA-COMPACT / FOLDABLE COVER SCREEN (<= 380px)
+   ========================================== */
+@media (max-width: 380px) {
+  .battle-topbar {
+    padding: 4px 6px;
+    gap: 4px 5px;
+  }
+  .bt-btn {
+    padding: 4px 6px;
+    font-size: 0.68rem;
+  }
+  .level-pill {
+    padding: 2px 6px;
+    font-size: 0.65rem;
+  }
+  .turn-pill {
+    padding: 3px 7px;
+    font-size: 0.69rem;
+    gap: 4px;
+  }
+  .wind-box {
+    padding: 3px 6px;
+    gap: 4px;
+  }
+  .wind-title {
+    display: none;
+  }
+  .wind-meter {
+    width: 34px;
+  }
+  .wind-val {
+    font-size: 0.66rem;
+    min-width: 32px;
+  }
+  .wpn-btn {
+    font-size: 0.62rem;
+    padding: 4px 1px;
+  }
+  .wpn-btn .w-ico {
+    font-size: 0.7rem;
+  }
+  .wpn-btn .w-cnt {
+    font-size: 0.58rem;
+    padding: 0 3px;
+  }
+  .controls-main-row {
+    grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.85fr) auto;
+    gap: 4px;
+  }
+  .ctrl-group {
+    padding: 4px 5px;
+  }
+  .pad-btn {
+    width: 29px;
+    height: 31px;
+    flex: 0 0 29px;
+    font-size: 0.8rem;
+  }
+  .pad-btn.sm {
+    width: 27px;
+    height: 31px;
+    flex: 0 0 27px;
+    font-size: 0.78rem;
+  }
+  .move-center-lbl {
+    min-width: 26px;
+  }
+  .move-center-lbl span,
+  .ang-lbl {
+    font-size: 0.58rem;
+  }
+  .move-center-lbl strong {
+    font-size: 0.68rem;
+  }
+  .angle-readout {
+    min-width: 32px;
+  }
+  #lbl-angle {
+    font-size: 0.82rem;
+  }
+  .scatter-btn {
+    min-width: 44px;
+    padding: 3px 4px;
+  }
+  .scatter-ico {
+    font-size: 0.82rem;
+  }
+  .scatter-txt {
+    font-size: 0.66rem;
+  }
+  .scatter-sub {
+    font-size: 0.52rem;
   }
 }
 
